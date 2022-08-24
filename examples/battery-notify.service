@@ -1,0 +1,10 @@
+[Unit]
+Description=A battery notification daemon
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/battery-notify
+
+[Install]
+WantedBy=default.target

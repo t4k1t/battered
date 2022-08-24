@@ -1,0 +1,4 @@
+[general]
+interval = 60
+threshold_low = 0.8
+threshold_critical = 0.25
