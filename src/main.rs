@@ -19,14 +19,33 @@ enum Level {
 
 fn main() -> battery::Result<()> {
     let config_path = xdg_config_home().join("batterynotify/config.toml");
-    let config: Config = toml::from_str(&std::fs::read_to_string(config_path).unwrap()).unwrap();
+
+    let config_values = match std::fs::read_to_string(&config_path) {
+        Ok(config) => config,
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                println!(
+                    "Config file not found at '{}'; falling back to defaults",
+                    config_path.display()
+                );
+                "[general]".to_string()
+            } else {
+                panic!(
+                    "Failed to read config at '{}'; {}",
+                    config_path.display(),
+                    e
+                );
+            }
+        }
+    };
+    let config: Config = toml::from_str(&config_values).unwrap();
     let interval = Duration::from_secs(config.general.interval);
     let threshold_low = config.general.threshold_low;
     let threshold_critical = config.general.threshold_critical;
 
     let manager = battery::Manager::new()?;
-    let mut my_battery = match manager.batteries()?.next() {
-        Some(Ok(my_battery)) => my_battery,
+    let mut first_battery = match manager.batteries()?.next() {
+        Some(Ok(first_battery)) => first_battery,
         Some(Err(e)) => {
             eprintln!("Unable to access battery information");
             return Err(e);
@@ -39,8 +58,8 @@ fn main() -> battery::Result<()> {
     let mut level = Level::Charged;
 
     loop {
-        let charge = my_battery.state_of_charge();
-        let state = my_battery.state();
+        let charge = first_battery.state_of_charge();
+        let state = first_battery.state();
         println!("{:?}", charge);
         println!("{:?}", state);
         if state != State::Charging && charge.value < threshold_critical {
@@ -62,6 +81,7 @@ fn main() -> battery::Result<()> {
                     .summary("Battery discharging")
                     .body(format!("Battery percentage down to {:04}%", charge.value).as_str())
                     .icon("battery-low")
+                    .timeout(Timeout::Milliseconds(5000))
                     .show()
                     .unwrap();
             };
@@ -69,7 +89,7 @@ fn main() -> battery::Result<()> {
             level = Level::Charged;
         };
         thread::sleep(interval);
-        manager.refresh(&mut my_battery)?;
+        manager.refresh(&mut first_battery)?;
     }
 }
 
