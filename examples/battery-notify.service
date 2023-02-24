@@ -4,6 +4,7 @@ After=multi-user.target
 
 [Service]
 Type=simple
+Environment=RUST_LOG=WARN
 ExecStart=/usr/bin/battery-notify
 
 [Install]

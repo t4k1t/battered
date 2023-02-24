@@ -1,5 +1,7 @@
 mod config;
 
+#[macro_use]
+extern crate log;
 extern crate battery;
 use battery::State;
 use config::Config;
@@ -19,12 +21,13 @@ enum Level {
 
 fn main() -> battery::Result<()> {
     let config_path = xdg_config_home().join("batterynotify/config.toml");
+    env_logger::init();
 
     let config_values = match std::fs::read_to_string(&config_path) {
         Ok(config) => config,
         Err(e) => {
             if e.kind() == std::io::ErrorKind::NotFound {
-                println!(
+                warn!(
                     "Config file not found at '{}'; falling back to defaults",
                     config_path.display()
                 );
@@ -47,11 +50,11 @@ fn main() -> battery::Result<()> {
     let mut first_battery = match manager.batteries()?.next() {
         Some(Ok(first_battery)) => first_battery,
         Some(Err(e)) => {
-            eprintln!("Unable to access battery information");
+            error!("Unable to access battery information");
             return Err(e);
         }
         None => {
-            eprintln!("Unable to find any batteries");
+            error!("Unable to find any batteries");
             return Err(io::Error::from(io::ErrorKind::NotFound).into());
         }
     };
@@ -60,14 +63,14 @@ fn main() -> battery::Result<()> {
     loop {
         let charge = first_battery.state_of_charge();
         let state = first_battery.state();
-        println!("{:?}", charge);
-        println!("{:?}", state);
+        info!("Charge: {:?}", charge);
+        info!("State:  {:?}", state);
         if state != State::Charging && charge.value < threshold_critical {
             if level != Level::Critical {
                 level = Level::Critical;
                 Notification::new()
                     .summary("Battery low!")
-                    .body(format!("Battery percentage down to {:04}%", charge.value).as_str())
+                    .body(format!("Battery percentage down to {}%", charge.value * 100.0).as_str())
                     .icon("battery-caution")
                     .urgency(Urgency::Critical)
                     .timeout(Timeout::Never)
@@ -79,7 +82,7 @@ fn main() -> battery::Result<()> {
                 level = Level::Low;
                 Notification::new()
                     .summary("Battery discharging")
-                    .body(format!("Battery percentage down to {:04}%", charge.value).as_str())
+                    .body(format!("Battery percentage down to {}%", charge.value * 100.0).as_str())
                     .icon("battery-low")
                     .timeout(Timeout::Milliseconds(5000))
                     .show()
