@@ -18,3 +18,7 @@ interval = 60              # in seconds
 threshold_low = 0.8        # percentage as decimal
 threshold_critical = 0.25  # percentage as decimal
 ```
+
+## Logging
+
+Logging is configured via the `RUST_LOG` env variable. The provided systemd unit example sets the log level to `WARN` per default.
