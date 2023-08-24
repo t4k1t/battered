@@ -2,10 +2,10 @@ mod config;
 
 #[macro_use]
 extern crate log;
-extern crate battery;
-use battery::State;
+extern crate starship_battery;
 use config::Config;
 use notify_rust::{Notification, Timeout, Urgency};
+use starship_battery::State;
 
 use std::io;
 use std::path::PathBuf;
@@ -19,7 +19,7 @@ enum Level {
     Critical,
 }
 
-fn main() -> battery::Result<()> {
+fn main() -> starship_battery::Result<()> {
     let config_path = xdg_config_home().join("batterynotify/config.toml");
     env_logger::init();
 
@@ -46,7 +46,7 @@ fn main() -> battery::Result<()> {
     let threshold_low = config.general.threshold_low;
     let threshold_critical = config.general.threshold_critical;
 
-    let manager = battery::Manager::new()?;
+    let manager = starship_battery::Manager::new()?;
     let mut first_battery = match manager.batteries()?.next() {
         Some(Ok(first_battery)) => first_battery,
         Some(Err(e)) => {
