@@ -70,13 +70,7 @@ fn main() -> starship_battery::Result<()> {
                 level = Level::Critical;
                 Notification::new()
                     .summary("Battery low!")
-                    .body(
-                        format!(
-                            "Battery percentage down to {}%",
-                            (charge.value * 100.0).trunc()
-                        )
-                        .as_str(),
-                    )
+                    .body(format!("Battery below {}%", (charge.value * 100.0).trunc()).as_str())
                     .icon("battery-caution")
                     .urgency(Urgency::Critical)
                     .timeout(Timeout::Never)
@@ -88,13 +82,7 @@ fn main() -> starship_battery::Result<()> {
                 level = Level::Low;
                 Notification::new()
                     .summary("Battery discharging")
-                    .body(
-                        format!(
-                            "Battery percentage down to {}%",
-                            (charge.value * 100.0).trunc()
-                        )
-                        .as_str(),
-                    )
+                    .body(format!("Battery below {}%", (charge.value * 100.0).trunc()).as_str())
                     .icon("battery-low")
                     .timeout(Timeout::Milliseconds(5000))
                     .show()
