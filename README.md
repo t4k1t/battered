@@ -2,7 +2,7 @@
 
 Regularly polls battery levels and sends notifications on crossing certain thresholds.
 
-The idea is to have one notification to warn about the battery discharging and another, persistent, notification when action has to be taken. Both tresholds and the poll interval can be configured.
+The idea is to have one notification to warn about the battery discharging and another, persistent, notification when action has to be taken. Both thresholds and the poll interval can be configured.
 
 ## Config
 
