@@ -68,25 +68,25 @@ fn main() -> starship_battery::Result<()> {
         if state != State::Charging && charge.value < threshold_critical {
             if level != Level::Critical {
                 level = Level::Critical;
-                Notification::new()
+                let mut notification = Notification::new();
+                notification
                     .summary("Battery low!")
                     .body(format!("Battery at {}%", (charge.value * 100.0).trunc()).as_str())
                     .icon("battery-caution")
                     .urgency(Urgency::Critical)
-                    .timeout(Timeout::Never)
-                    .show()
-                    .unwrap();
+                    .timeout(Timeout::Never);
+                notification.show().ok();
             };
         } else if state != State::Charging && charge.value < threshold_low {
             if level != Level::Low {
                 level = Level::Low;
-                Notification::new()
+                let mut notification = Notification::new();
+                notification
                     .summary("Battery discharging")
                     .body(format!("Battery at {}%", (charge.value * 100.0).trunc()).as_str())
                     .icon("battery-low")
-                    .timeout(Timeout::Milliseconds(5000))
-                    .show()
-                    .unwrap();
+                    .urgency(Urgency::Normal);
+                notification.show().ok();
             };
         } else {
             level = Level::Charged;
