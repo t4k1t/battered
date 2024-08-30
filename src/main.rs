@@ -71,7 +71,7 @@ fn main() -> starship_battery::Result<()> {
                 let mut notification = Notification::new();
                 notification
                     .summary("Battery low!")
-                    .body(format!("Battery at {}%", (charge.value * 100.0).trunc()).as_str())
+                    .body(format!("Battery below {}%", (charge.value * 100.0).trunc()).as_str())
                     .icon("battery-caution")
                     .urgency(Urgency::Critical)
                     .timeout(Timeout::Never);
@@ -83,7 +83,7 @@ fn main() -> starship_battery::Result<()> {
                 let mut notification = Notification::new();
                 notification
                     .summary("Battery discharging")
-                    .body(format!("Battery at {}%", (charge.value * 100.0).trunc()).as_str())
+                    .body(format!("Battery below {}%", (charge.value * 100.0).trunc()).as_str())
                     .icon("battery-low")
                     .urgency(Urgency::Normal);
                 notification.show().ok();
