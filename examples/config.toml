@@ -2,4 +2,5 @@
 interval = 60
 threshold_low = 0.8
 threshold_critical = 0.25
-action_low = "notify-send 'battery low buddy'"
+action_low = "tuned-adm profile laptop-battery-powersave"
+action_critical = "systemctl suspend"

@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Update dependencies
 - Update cargo deny config
+- Update README
+- Update example config
 
 ## [0.3.4] - unreleased
 

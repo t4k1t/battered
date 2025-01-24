@@ -17,8 +17,8 @@ Example config:
 interval = 60              # in seconds
 threshold_low = 0.8        # percentage as decimal
 threshold_critical = 0.25  # percentage as decimal
-action_low = 'tuned-adm profile laptop-battery-powersave'
-action_critical = 'systemctl suspend'
+action_low = "tuned-adm profile laptop-battery-powersave"
+action_critical = "systemctl suspend"
 ```
 
 ## Logging
