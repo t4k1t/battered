@@ -5,10 +5,12 @@ extern crate log;
 extern crate starship_battery;
 use config::Config;
 use notify_rust::{Notification, Timeout, Urgency};
+use shell_words::split as shell_split;
 use starship_battery::State;
 
 use std::io;
 use std::path::PathBuf;
+use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
@@ -45,6 +47,8 @@ fn main() -> starship_battery::Result<()> {
     let interval = Duration::from_secs(config.general.interval);
     let threshold_low = config.general.threshold_low;
     let threshold_critical = config.general.threshold_critical;
+    let action_low = shell_split(&config.general.action_low.unwrap_or_default()).unwrap();
+    let action_critical = shell_split(&config.general.action_critical.unwrap_or_default()).unwrap();
 
     let manager = starship_battery::Manager::new()?;
     let mut first_battery = match manager.batteries()?.next() {
@@ -53,7 +57,7 @@ fn main() -> starship_battery::Result<()> {
             error!("Unable to access battery information");
             return Err(e);
         }
-        None => {
+        _ => {
             error!("Unable to find any batteries");
             return Err(io::Error::from(io::ErrorKind::NotFound).into());
         }
@@ -69,6 +73,7 @@ fn main() -> starship_battery::Result<()> {
             if level != Level::Critical {
                 level = Level::Critical;
                 let mut notification = Notification::new();
+                // Send notification
                 notification
                     .summary("Battery low!")
                     .body(format!("Battery below {}%", (charge.value * 100.0).trunc()).as_str())
@@ -76,17 +81,44 @@ fn main() -> starship_battery::Result<()> {
                     .urgency(Urgency::Critical)
                     .timeout(Timeout::Never);
                 notification.show().ok();
+                // Run custom action
+                if !action_critical.is_empty() {
+                    Command::new(&action_critical[0])
+                        .args(&action_critical[1..])
+                        .status()
+                        .unwrap_or_else(|error_code| {
+                            panic!(
+                                "failed to execute '{}': {}",
+                                action_critical.join(" "),
+                                error_code
+                            )
+                        });
+                };
             };
         } else if state != State::Charging && charge.value < threshold_low {
             if level != Level::Low {
                 level = Level::Low;
                 let mut notification = Notification::new();
+                // Send notification
                 notification
                     .summary("Battery discharging")
                     .body(format!("Battery below {}%", (charge.value * 100.0).trunc()).as_str())
                     .icon("battery-low")
                     .urgency(Urgency::Normal);
                 notification.show().ok();
+                // Run custom action
+                if !action_low.is_empty() {
+                    Command::new(&action_low[0])
+                        .args(&action_low[1..])
+                        .status()
+                        .unwrap_or_else(|error_code| {
+                            panic!(
+                                "failed to execute '{}': {}",
+                                action_low.join(" "),
+                                error_code
+                            )
+                        });
+                };
             };
         } else {
             level = Level::Charged;

@@ -13,6 +13,10 @@ pub struct GeneralConfig {
     pub threshold_critical: f32,
     #[serde(default = "default_interval")]
     pub interval: u64,
+    #[serde(default = "default_action")]
+    pub action_low: Option<String>,
+    #[serde(default = "default_action")]
+    pub action_critical: Option<String>,
 }
 
 fn default_threshold_low() -> f32 {
@@ -25,4 +29,8 @@ fn default_threshold_critical() -> f32 {
 
 fn default_interval() -> u64 {
     60
+}
+
+fn default_action() -> Option<String> {
+    None
 }
