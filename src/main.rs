@@ -8,11 +8,9 @@ use notify_rust::{Notification, Timeout, Urgency};
 use shell_words::split as shell_split;
 use starship_battery::State;
 
-use std::io;
 use std::path::PathBuf;
 use std::process::Command;
 use std::thread;
-use std::time::Duration;
 
 #[derive(Debug, Eq, PartialEq)]
 enum Level {
@@ -21,19 +19,16 @@ enum Level {
     Critical,
 }
 
-fn main() -> starship_battery::Result<()> {
-    let config_path = xdg_config_home().join("batterynotify/config.toml");
-    env_logger::init();
-
+fn get_config(config_path: &PathBuf) -> Config {
     let config_values = match std::fs::read_to_string(&config_path) {
-        Ok(config) => config,
+        Ok(config_values) => config_values,
         Err(e) => {
             if e.kind() == std::io::ErrorKind::NotFound {
                 warn!(
                     "Config file not found at '{}'; falling back to defaults",
                     config_path.display()
                 );
-                "[general]".to_string()
+                String::new()
             } else {
                 panic!(
                     "Failed to read config at '{}'; {}",
@@ -43,77 +38,82 @@ fn main() -> starship_battery::Result<()> {
             }
         }
     };
-    let config: Config = toml::from_str(&config_values).unwrap();
-    let interval = Duration::from_secs(config.general.interval);
-    let threshold_low = config.general.threshold_low;
-    let threshold_critical = config.general.threshold_critical;
-    let action_low = shell_split(&config.general.action_low.unwrap_or_default()).unwrap();
-    let action_critical = shell_split(&config.general.action_critical.unwrap_or_default()).unwrap();
+    toml::from_str(&config_values)
+        .expect(format!("Failed to parse config at '{}'", config_path.display()).as_str())
+}
+
+fn main() -> starship_battery::Result<()> {
+    env_logger::init();
+    let config_path = xdg_config_home().join("batterynotify/config.toml");
+    let config = get_config(&config_path);
+
+    let action_low = shell_split(&config.general.action_low.unwrap_or_default())
+        .expect("Failed to parse action_low command");
+    let action_critical = shell_split(&config.general.action_critical.unwrap_or_default())
+        .expect("Failed to parse action_critical command");
 
     let manager = starship_battery::Manager::new()?;
     let mut first_battery = match manager.batteries()?.next() {
         Some(Ok(first_battery)) => first_battery,
         Some(Err(e)) => {
-            error!("Unable to access battery information");
-            return Err(e);
+            panic!("Unable to access battery information: {}", e);
         }
         _ => {
-            error!("Unable to find any batteries");
-            return Err(io::Error::from(io::ErrorKind::NotFound).into());
+            panic!("Unable to find any batteries");
         }
     };
     let mut level = Level::Charged;
 
     loop {
-        let charge = first_battery.state_of_charge();
+        let charge_value = first_battery.state_of_charge().value;
         let state = first_battery.state();
-        info!("Charge: {:?}", charge);
-        info!("State:  {:?}", state);
-        if state != State::Charging && charge.value < threshold_critical {
+        info!("Charge: {:.2}", charge_value);
+        info!("State:  {}", state);
+        if state != State::Charging && charge_value < config.general.threshold_critical {
             if level != Level::Critical {
                 level = Level::Critical;
                 let mut notification = Notification::new();
-                // Send notification
+                // Send critical level notification
                 notification
                     .summary("Battery low!")
-                    .body(format!("Battery below {}%", (charge.value * 100.0).trunc()).as_str())
+                    .body(format!("Battery below {}%", (charge_value * 100.0).trunc()).as_str())
                     .icon("battery-caution")
                     .urgency(Urgency::Critical)
                     .timeout(Timeout::Never);
                 notification.show().ok();
-                // Run custom action
+                // Run critical level custom action
                 if !action_critical.is_empty() {
                     Command::new(&action_critical[0])
                         .args(&action_critical[1..])
                         .status()
                         .unwrap_or_else(|error_code| {
                             panic!(
-                                "failed to execute '{}': {}",
+                                "Failed to execute '{}': {}",
                                 action_critical.join(" "),
                                 error_code
                             )
                         });
                 };
             };
-        } else if state != State::Charging && charge.value < threshold_low {
+        } else if state != State::Charging && charge_value < config.general.threshold_low {
             if level != Level::Low {
                 level = Level::Low;
                 let mut notification = Notification::new();
-                // Send notification
+                // Send low level notification
                 notification
                     .summary("Battery discharging")
-                    .body(format!("Battery below {}%", (charge.value * 100.0).trunc()).as_str())
+                    .body(format!("Battery below {}%", (charge_value * 100.0).trunc()).as_str())
                     .icon("battery-low")
                     .urgency(Urgency::Normal);
                 notification.show().ok();
-                // Run custom action
+                // Run low level custom action
                 if !action_low.is_empty() {
                     Command::new(&action_low[0])
                         .args(&action_low[1..])
                         .status()
                         .unwrap_or_else(|error_code| {
                             panic!(
-                                "failed to execute '{}': {}",
+                                "Failed to execute '{}': {}",
                                 action_low.join(" "),
                                 error_code
                             )
@@ -123,7 +123,7 @@ fn main() -> starship_battery::Result<()> {
         } else {
             level = Level::Charged;
         };
-        thread::sleep(interval);
+        thread::sleep(config.general.interval);
         manager.refresh(&mut first_battery)?;
     }
 }
