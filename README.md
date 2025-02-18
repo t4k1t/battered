@@ -1,5 +1,7 @@
 # battery-notify
 
+<img height="128" alt="battery-notify Icon" src="https://raw.githubusercontent.com/t4k1t/battery-notify/icon/assets/icon/battery-notify-icon.svg" align="left">
+
 Regularly polls battery levels and sends notifications on crossing certain thresholds.
 
 The idea is to have one notification to warn about the battery discharging and another, persistent, notification when action has to be taken. Both thresholds and the poll interval can be configured.
