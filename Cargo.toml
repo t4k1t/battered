@@ -1,8 +1,13 @@
 [package]
-name = "battery-notify"
-version = "0.4.0"
+name = "battered"
+version = "0.5.0"
 edition = "2021"
 license = "MIT"
+description = "Regularly polls battery levels and sends notifications on crossing certain thresholds."
+repository = "https://github.com/t4k1t/battered"
+readme = "README.md"
+keywords = ["battery", "linux", "notification", "cli", "command"]
+categories = ["command-line-utilities"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

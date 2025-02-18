@@ -44,7 +44,7 @@ fn get_config(config_path: &PathBuf) -> Config {
 
 fn main() -> starship_battery::Result<()> {
     env_logger::init();
-    let config_path = xdg_config_home().join("batterynotify/config.toml");
+    let config_path = xdg_config_home().join("battered/config.toml");
     let config = get_config(&config_path);
 
     let action_low = shell_split(&config.general.action_low.unwrap_or_default())
