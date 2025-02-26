@@ -5,7 +5,6 @@ extern crate log;
 extern crate starship_battery;
 use config::Config;
 use notify_rust::{Notification, Timeout, Urgency};
-use shell_words::split as shell_split;
 use starship_battery::State;
 
 use std::path::PathBuf;
@@ -47,10 +46,8 @@ fn main() -> starship_battery::Result<()> {
     let config_path = xdg_config_home().join("battered/config.toml");
     let config = get_config(&config_path);
 
-    let action_low = shell_split(&config.general.action_low.unwrap_or_default())
-        .expect("Failed to parse action_low command");
-    let action_critical = shell_split(&config.general.action_critical.unwrap_or_default())
-        .expect("Failed to parse action_critical command");
+    let action_low = &config.general.action_low.unwrap_or_default();
+    let action_critical = &config.general.action_critical.unwrap_or_default();
 
     let manager = starship_battery::Manager::new()?;
     let mut first_battery = match manager.batteries()?.next() {
