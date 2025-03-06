@@ -9,15 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Unit tests for config deserialization
+- Tests for config deserialization
+- Tests for checking and handling actions
+- Support for unlimited threshold actions and notifications
 
 ### Changed
 
-- Improve config deserialization
+- Improved config deserialization
+- Refactored error handling to use `anyhow`
 
 ### Removed
 
 - Unused license from cargo-deny
+- Support for explicit low/critical threshold notifications and commands
 
 ## [0.5.0] - 2025-02-18
 
