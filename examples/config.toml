@@ -6,6 +6,7 @@ percentage = 0.5
 command = "./powersave.sh enable"
 # The entire `[action.notify]` section is optional
 
+# Notify of discharging battery when below 80% battery level
 [[action]]
 # `percentage` is required
 percentage = 0.8
@@ -18,9 +19,10 @@ summary = "Battery discharging"
 # icon = "battery-discharging"
 # timeout = 2000
 
+# Show persistent notification and run custom command on battery level falling below 25%
 [[action]]
 percentage = 0.25
-command = "./powersave.sh suspend"
+command = "./powersave.sh set-mode agressive"
 [action.notify]
 # `summary` is required if there is an `[action.notify]` section
 summary = "Battery low!"
