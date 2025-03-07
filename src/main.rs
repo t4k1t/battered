@@ -128,13 +128,14 @@ fn main() -> Result<()> {
 fn match_actions<T: CommandRunner + DesktopNotification>(
     actions: &mut [T],
     charge_value: f32,
-    last_action_index: usize,
+    last_action_index: &mut usize,
 ) -> Result<(), anyhow::Error> {
     for (i, action) in (actions).iter_mut().enumerate() {
         if action.below_threshold(charge_value) {
-            if i == last_action_index {
+            if i == *last_action_index {
                 break; // Action was already taken last iteration, nothing else to do
             }
+            *last_action_index = i;
             let percentage = (charge_value * 100.0).floor();
             let format_obj = FormatObject {
                 percentage: &percentage,
@@ -299,7 +300,8 @@ mod tests {
         let charge_value = 0.7; // Value above percentage threshold
 
         let mut actions = vec![action];
-        let result = match_actions(&mut actions, charge_value, 0);
+        let mut last_action_index: usize = 0;
+        let result = match_actions(&mut actions, charge_value, &mut last_action_index);
         assert!(result.is_ok());
         assert_eq!(action.show_call_count, 0);
         assert_eq!(action.run_call_count, 0);
@@ -316,7 +318,8 @@ mod tests {
         let charge_value = 0.3; // Value below percentage threshold
 
         let mut actions = vec![action]; // Creates a copy
-        let result = match_actions(&mut actions, charge_value, usize::MAX);
+        let mut last_action_index = usize::MAX;
+        let result = match_actions(&mut actions, charge_value, &mut last_action_index);
 
         let result_action = actions[0];
         assert!(result.is_ok());
