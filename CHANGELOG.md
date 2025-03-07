@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tests for config deserialization
 - Tests for checking and handling actions
 - Support for unlimited threshold actions and notifications
+- Implemented templating for notification texts
+- Tests for notification templating
 
 ### Changed
 
