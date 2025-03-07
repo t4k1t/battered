@@ -1,12 +1,14 @@
 mod config;
+mod template;
 
 #[macro_use]
 extern crate log;
 extern crate starship_battery;
 use anyhow::{Context, Result};
-use config::{Action, Config};
+use config::{xdg_config_home, Action, Config};
 use notify_rust::{Notification, Urgency};
 use starship_battery::State;
+use template::{FormatObject, Template};
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -40,15 +42,17 @@ impl CommandRunner for Action {
 }
 
 trait DesktopNotification {
-    fn show(&mut self);
+    fn show(&mut self, format_obj: &FormatObject);
     fn has_notify(&self) -> bool;
+    fn fill_template<T: Template>(&self, format_obj: &T) -> String;
 }
 
 impl DesktopNotification for Action {
-    fn show(&mut self) {
+    fn show(&mut self, format_obj: &FormatObject) {
         if let Some(n) = &self.notify {
+            let templated_summary = &self.fill_template(format_obj);
             Notification::new()
-                .summary(n.summary.as_str())
+                .summary(templated_summary)
                 .body(n.body.as_ref().unwrap_or(&"".to_string()).as_str())
                 .icon(n.icon.as_str())
                 .urgency(n.urgency)
@@ -60,6 +64,25 @@ impl DesktopNotification for Action {
 
     fn has_notify(&self) -> bool {
         self.notify.is_some()
+    }
+
+    fn fill_template<T: Template>(&self, format_obj: &T) -> String {
+        if let Some(n) = &self.notify {
+            let mut result = n.summary.clone();
+            let format_string = format_obj.to_template();
+
+            // Replace template vars with templated values from FormatObject
+            for line in format_string.lines() {
+                let parts: Vec<&str> = line.split(": ").collect();
+                if parts.len() == 2 {
+                    let placeholder = format!("${}", parts[0]);
+                    result = result.replace(&placeholder, parts[1]);
+                }
+            }
+            result
+        } else {
+            String::from("")
+        }
     }
 }
 
@@ -112,9 +135,14 @@ fn match_actions<T: CommandRunner + DesktopNotification>(
             if i == last_action_index {
                 break; // Action was already taken last iteration, nothing else to do
             }
-            match trigger_action(action) {
+            let percentage = (charge_value * 100.0).floor();
+            let format_obj = FormatObject {
+                percentage: &percentage,
+            };
+            match trigger_action(action, &format_obj) {
                 Ok(_) => (),
                 Err(e) => {
+                    // Show notification about failed action
                     Notification::new()
                         .summary("Battered action failed")
                         .body(e.to_string().as_str())
@@ -130,9 +158,12 @@ fn match_actions<T: CommandRunner + DesktopNotification>(
     Ok(())
 }
 
-fn trigger_action<A: CommandRunner + DesktopNotification>(action: &mut A) -> Result<()> {
+fn trigger_action<A: CommandRunner + DesktopNotification>(
+    action: &mut A,
+    format_obj: &FormatObject,
+) -> Result<()> {
     if action.has_notify() {
-        action.show(); // Show notification
+        action.show(format_obj); // Show notification
     }
     action.run() // Run command
 }
@@ -157,26 +188,11 @@ fn get_config(config_path: &PathBuf) -> Result<Config, anyhow::Error> {
     Ok(config)
 }
 
-// Taken from i3status-rust
-fn xdg_config_home() -> PathBuf {
-    // In the unlikely event that $HOME is not set, it doesn't really matter
-    // what we fall back on, so use /.config.
-    let config_path = std::env::var("XDG_CONFIG_HOME").unwrap_or(format!(
-        "{}/.config",
-        std::env::var("HOME").unwrap_or_else(|_| "".to_string())
-    ));
-    PathBuf::from(&config_path)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use config::Notify;
     use notify_rust::Timeout;
-    use std::env;
-    use std::sync::Mutex;
-
-    static ENV_VAR_MUTEX: Mutex<()> = Mutex::new(());
 
     #[derive(Copy, Clone)]
     struct MockNotify {}
@@ -190,11 +206,14 @@ mod tests {
     }
 
     impl DesktopNotification for MockAction {
-        fn show(&mut self) {
+        fn show(&mut self, _format_obj: &FormatObject) {
             self.show_call_count += 1;
         }
         fn has_notify(&self) -> bool {
             self.notify.is_some()
+        }
+        fn fill_template<T: Template>(&self, _format_obj: &T) -> String {
+            String::from("")
         }
     }
 
@@ -244,7 +263,8 @@ mod tests {
             percentage: 0.5,
             notify: None,
         };
-        let result = trigger_action(&mut action);
+        let format_obj = FormatObject { percentage: &50.0 };
+        let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_ok());
         assert_eq!(action.show_call_count, 0);
         assert_eq!(action.run_call_count, 1);
@@ -260,7 +280,8 @@ mod tests {
             notify: Some(mock_notify),
         };
 
-        let result = trigger_action(&mut action);
+        let format_obj = FormatObject { percentage: &50.0 };
+        let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_ok());
         assert_eq!(action.show_call_count, 1);
         assert_eq!(action.run_call_count, 1);
@@ -303,6 +324,60 @@ mod tests {
     }
 
     #[test]
+    fn test_template_replaces_percentage() {
+        let action_w_notify = Action {
+            percentage: 0.5,
+            command: None,
+            notify: Some(Notify {
+                summary: String::from("Percentage is $percentage%!"),
+                body: None,
+                urgency: Urgency::Low,
+                icon: String::from(""),
+                timeout: Timeout::Default,
+            }),
+        };
+        let format_obj = FormatObject { percentage: &42.0 };
+        let result = action_w_notify.fill_template(&format_obj);
+        assert_eq!(result, "Percentage is 42%!");
+    }
+
+    #[test]
+    fn test_template_replaces_nothing() {
+        let action_w_notify = Action {
+            percentage: 0.5,
+            command: None,
+            notify: Some(Notify {
+                summary: String::from("No percentage to replace here!"),
+                body: None,
+                urgency: Urgency::Low,
+                icon: String::from(""),
+                timeout: Timeout::Default,
+            }),
+        };
+        let format_obj = FormatObject { percentage: &42.0 };
+        let result = action_w_notify.fill_template(&format_obj);
+        assert_eq!(result, "No percentage to replace here!");
+    }
+
+    #[test]
+    fn test_template_does_not_replace_unknown() {
+        let action_w_notify = Action {
+            percentage: 0.5,
+            command: None,
+            notify: Some(Notify {
+                summary: String::from("No $value to replace here!"),
+                body: None,
+                urgency: Urgency::Low,
+                icon: String::from(""),
+                timeout: Timeout::Default,
+            }),
+        };
+        let format_obj = FormatObject { percentage: &42.0 };
+        let result = action_w_notify.fill_template(&format_obj);
+        assert_eq!(result, "No $value to replace here!");
+    }
+
+    #[test]
     fn test_get_config_from_invalid_path() {
         let result = get_config(&PathBuf::from("/dev/null"));
         assert!(result.is_err());
@@ -310,31 +385,5 @@ mod tests {
             result.unwrap_err().to_string(),
             "Failed to parse config at '/dev/null'"
         );
-    }
-
-    #[test]
-    fn test_xdg_config_home() {
-        let _lock = ENV_VAR_MUTEX.lock().unwrap();
-        env::set_var("XDG_CONFIG_HOME", "/home/battered/.config");
-        let config_home = xdg_config_home();
-        assert_eq!(config_home, PathBuf::from("/home/battered/.config"));
-    }
-
-    #[test]
-    fn test_xdg_config_home_from_home_var() {
-        let _lock = ENV_VAR_MUTEX.lock().unwrap();
-        env::remove_var("XDG_CONFIG_HOME");
-        env::set_var("HOME", "/home/battered");
-        let config_home = xdg_config_home();
-        assert_eq!(config_home, PathBuf::from("/home/battered/.config"));
-    }
-
-    #[test]
-    fn test_xdg_config_home_from_nothing() {
-        let _lock = ENV_VAR_MUTEX.lock().unwrap();
-        env::remove_var("XDG_CONFIG_HOME");
-        env::remove_var("HOME");
-        let config_home = xdg_config_home();
-        assert_eq!(config_home, PathBuf::from("/.config"));
     }
 }

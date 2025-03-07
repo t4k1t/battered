@@ -3,6 +3,7 @@ use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer};
 use serde_with::{serde_as, DurationSeconds};
 use shell_words::split as shell_split;
+use std::path::PathBuf;
 use std::time::Duration;
 
 #[serde_as]
@@ -41,12 +42,12 @@ fn default_urgency() -> Urgency {
     Urgency::Normal
 }
 
-fn default_interval() -> Duration {
-    Duration::from_secs(60)
-}
-
 fn default_icon() -> String {
     "battery-caution".to_string()
+}
+
+fn default_interval() -> Duration {
+    Duration::from_secs(60)
 }
 
 fn deserialize_float_percentage<'de, D>(deserializer: D) -> Result<f32, D::Error>
@@ -74,16 +75,6 @@ where
         Err(e) => Err(D::Error::custom(format!("Failed to split command: {}", e))),
     }
 }
-
-fn deserialize_timeout<'de, D>(deserializer: D) -> Result<Timeout, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    // Deserialize the integer
-    let value: i32 = i32::deserialize(deserializer)?;
-    Ok(Timeout::from(value))
-}
-
 fn deserialize_urgency<'de, D>(deserializer: D) -> Result<Urgency, D::Error>
 where
     D: Deserializer<'de>,
@@ -100,10 +91,34 @@ where
     }
 }
 
+fn deserialize_timeout<'de, D>(deserializer: D) -> Result<Timeout, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    // Deserialize the integer
+    let value: i32 = i32::deserialize(deserializer)?;
+    Ok(Timeout::from(value))
+}
+
+// Taken from i3status-rust
+pub fn xdg_config_home() -> PathBuf {
+    // In the unlikely event that $HOME is not set, it doesn't really matter
+    // what we fall back on, so use /.config.
+    let config_path = std::env::var("XDG_CONFIG_HOME").unwrap_or(format!(
+        "{}/.config",
+        std::env::var("HOME").unwrap_or_else(|_| "".to_string())
+    ));
+    PathBuf::from(&config_path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+    use std::sync::Mutex;
     use toml;
+
+    static ENV_VAR_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_valid_config() {
@@ -321,5 +336,31 @@ mod tests {
             result.unwrap_err().message(),
             "Failed to split command: missing closing quote"
         );
+    }
+
+    #[test]
+    fn test_xdg_config_home() {
+        let _lock = ENV_VAR_MUTEX.lock().unwrap();
+        env::set_var("XDG_CONFIG_HOME", "/home/battered/.config");
+        let config_home = xdg_config_home();
+        assert_eq!(config_home, PathBuf::from("/home/battered/.config"));
+    }
+
+    #[test]
+    fn test_xdg_config_home_from_home_var() {
+        let _lock = ENV_VAR_MUTEX.lock().unwrap();
+        env::remove_var("XDG_CONFIG_HOME");
+        env::set_var("HOME", "/home/battered");
+        let config_home = xdg_config_home();
+        assert_eq!(config_home, PathBuf::from("/home/battered/.config"));
+    }
+
+    #[test]
+    fn test_xdg_config_home_from_nothing() {
+        let _lock = ENV_VAR_MUTEX.lock().unwrap();
+        env::remove_var("XDG_CONFIG_HOME");
+        env::remove_var("HOME");
+        let config_home = xdg_config_home();
+        assert_eq!(config_home, PathBuf::from("/.config"));
     }
 }
