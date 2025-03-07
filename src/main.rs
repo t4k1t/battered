@@ -44,16 +44,18 @@ impl CommandRunner for Action {
 trait DesktopNotification {
     fn show(&mut self, format_obj: &FormatObject);
     fn has_notify(&self) -> bool;
-    fn fill_template<T: Template>(&self, format_obj: &T) -> String;
+    fn fill_template<T: Template>(&self, input_string: String, format_obj: &T) -> String;
 }
 
 impl DesktopNotification for Action {
     fn show(&mut self, format_obj: &FormatObject) {
         if let Some(n) = &self.notify {
-            let templated_summary = &self.fill_template(format_obj);
+            let templated_summary = &self.fill_template(n.summary.clone(), format_obj);
+            let mut body = n.body.clone().unwrap_or(String::from(""));
+            body = self.fill_template(body, format_obj);
             Notification::new()
                 .summary(templated_summary)
-                .body(n.body.as_ref().unwrap_or(&"".to_string()).as_str())
+                .body(body.as_str())
                 .icon(n.icon.as_str())
                 .urgency(n.urgency)
                 .timeout(n.timeout)
@@ -66,23 +68,19 @@ impl DesktopNotification for Action {
         self.notify.is_some()
     }
 
-    fn fill_template<T: Template>(&self, format_obj: &T) -> String {
-        if let Some(n) = &self.notify {
-            let mut result = n.summary.clone();
-            let format_string = format_obj.to_template();
+    fn fill_template<T: Template>(&self, input_string: String, format_obj: &T) -> String {
+        let mut result = input_string;
+        let format_string = format_obj.to_template();
 
-            // Replace template vars with templated values from FormatObject
-            for line in format_string.lines() {
-                let parts: Vec<&str> = line.split(": ").collect();
-                if parts.len() == 2 {
-                    let placeholder = format!("${}", parts[0]);
-                    result = result.replace(&placeholder, parts[1]);
-                }
+        // Replace template vars with templated values from FormatObject
+        for line in format_string.lines() {
+            let parts: Vec<&str> = line.split(": ").collect();
+            if parts.len() == 2 {
+                let placeholder = format!("${}", parts[0]);
+                result = result.replace(&placeholder, parts[1]);
             }
-            result
-        } else {
-            String::from("")
         }
+        result
     }
 }
 
@@ -120,7 +118,8 @@ fn main() -> Result<()> {
             thread::sleep(config.interval);
             continue; // If the battery is charging there is nothing to do
         }
-        match_actions(&mut actions, charge_value, last_action_index).with_context(|| "Failed")?;
+        match_actions(&mut actions, charge_value, &mut last_action_index)
+            .with_context(|| "Failed")?;
         thread::sleep(config.interval);
     }
 }
@@ -213,7 +212,7 @@ mod tests {
         fn has_notify(&self) -> bool {
             self.notify.is_some()
         }
-        fn fill_template<T: Template>(&self, _format_obj: &T) -> String {
+        fn fill_template<T: Template>(&self, _input_string: String, _format_obj: &T) -> String {
             String::from("")
         }
     }
@@ -289,6 +288,23 @@ mod tests {
     }
 
     #[test]
+    fn test_threshold_below_threshold_fn() {
+        let action = Action {
+            percentage: 0.5,
+            command: None,
+            notify: None,
+        };
+        let charge_value_below = 0.3; // Value below percentage threshold
+        let charge_value_above = 0.8; // Value below percentage threshold
+
+        let below_result = action.below_threshold(charge_value_below);
+        assert_eq!(below_result, true);
+
+        let above_result = action.below_threshold(charge_value_above);
+        assert_eq!(above_result, false);
+    }
+
+    #[test]
     fn test_threshold_action_above_threshold() {
         let mock_notify = MockNotify {};
         let action = MockAction {
@@ -328,29 +344,34 @@ mod tests {
 
     #[test]
     fn test_template_replaces_percentage() {
+        let summary = String::from("Percentage is $percentage%!");
+        let body = String::from("$percentage is also in the body");
         let action_w_notify = Action {
             percentage: 0.5,
             command: None,
             notify: Some(Notify {
-                summary: String::from("Percentage is $percentage%!"),
-                body: None,
+                summary: summary.clone(),
+                body: Some(body.clone()),
                 urgency: Urgency::Low,
                 icon: String::from(""),
                 timeout: Timeout::Default,
             }),
         };
         let format_obj = FormatObject { percentage: &42.0 };
-        let result = action_w_notify.fill_template(&format_obj);
-        assert_eq!(result, "Percentage is 42%!");
+        let summary_result = action_w_notify.fill_template(summary, &format_obj);
+        assert_eq!(summary_result, "Percentage is 42%!");
+        let body_result = action_w_notify.fill_template(body, &format_obj);
+        assert_eq!(body_result, "42 is also in the body");
     }
 
     #[test]
     fn test_template_replaces_nothing() {
+        let summary = String::from("No percentage to replace here!");
         let action_w_notify = Action {
             percentage: 0.5,
             command: None,
             notify: Some(Notify {
-                summary: String::from("No percentage to replace here!"),
+                summary: summary.clone(),
                 body: None,
                 urgency: Urgency::Low,
                 icon: String::from(""),
@@ -358,17 +379,18 @@ mod tests {
             }),
         };
         let format_obj = FormatObject { percentage: &42.0 };
-        let result = action_w_notify.fill_template(&format_obj);
+        let result = action_w_notify.fill_template(summary, &format_obj);
         assert_eq!(result, "No percentage to replace here!");
     }
 
     #[test]
     fn test_template_does_not_replace_unknown() {
+        let summary = String::from("No $value to replace here!");
         let action_w_notify = Action {
             percentage: 0.5,
             command: None,
             notify: Some(Notify {
-                summary: String::from("No $value to replace here!"),
+                summary: summary.clone(),
                 body: None,
                 urgency: Urgency::Low,
                 icon: String::from(""),
@@ -376,7 +398,7 @@ mod tests {
             }),
         };
         let format_obj = FormatObject { percentage: &42.0 };
-        let result = action_w_notify.fill_template(&format_obj);
+        let result = action_w_notify.fill_template(summary, &format_obj);
         assert_eq!(result, "No $value to replace here!");
     }
 
