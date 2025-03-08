@@ -1,6 +1,34 @@
-[general]
 interval = 60
-threshold_low = 0.8
-threshold_critical = 0.25
-action_low = "tuned-adm profile laptop-battery-powersave"
-action_critical = "systemctl suspend"
+
+[[action]]
+# Order of actions doesn't matter - they get sorted by percentage at runtime
+percentage = 0.5
+command = "./powersave.sh enable"
+# The entire `[action.notify]` section is optional
+
+# Notify of discharging battery when below 80% battery level
+[[action]]
+# `percentage` is required
+percentage = 0.8
+# `command` is optional
+# command = "./powersave.sh enable"
+[action.notify]
+summary = "Battery discharging"
+body = "Battery level below $percentage%"
+# Below values are optional
+# urgency = "Normal"
+# icon = "battery-discharging"
+# timeout = 2000
+
+# Show persistent notification and run custom command on battery level falling below 25%
+[[action]]
+percentage = 0.25
+command = "./powersave.sh set-mode agressive"
+[action.notify]
+# `summary` is required if there is an `[action.notify]` section
+summary = "Battery low!"
+body = "Battery level below $percentage%!"
+urgency = "Critical"
+icon = "battery-caution"
+# `0` means never time out
+timeout = 0

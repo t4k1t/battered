@@ -4,9 +4,9 @@
 
 <img height="128" alt="battered Icon" src="https://raw.githubusercontent.com/t4k1t/battered/main/assets/icon/battered-icon.svg" align="left">
 
-Regularly polls battery levels and sends notifications on crossing certain thresholds.
+Regularly polls battery levels and reacts to crossing configurable thresholds.
 
-The idea is to have one notification to warn about the battery discharging and another, persistent, notification when action has to be taken. Both thresholds and the poll interval can be configured.
+For example, it could send a notification to call attention to the battery discharging, call a script to start battery saving mode on crossing the next threshold, and send another - persistent - notification when the battery level gets critical.
 
 -----
 
@@ -20,7 +20,7 @@ The idea is to have one notification to warn about the battery discharging and a
 
 ## Usage
 
-Simply run `battered`:
+First, make sure you've [configured](#configuration) some actions. Then simply run `battered`:
 
 ```bash
 battered
@@ -41,14 +41,25 @@ battered looks for a configuration file in the following places:
 2. `$HOME/.config/battered/config.toml`
 3. `/.config/battered/config.toml` if `$HOME` is not set
 
+The `summary` and `body` fields of the `[action.notify]` table support optional placeholders which will be replaced with calculated values. The following placeholders are available:
+
+| Placeholder | Description |
+| --- | --- |
+| `$percentage` | Current battery level in percent |
+
 Example config:
 ```
-[general]
-interval = 60              # in seconds
-threshold_low = 0.8        # percentage as decimal
-threshold_critical = 0.25  # percentage as decimal
-action_low = "tuned-adm profile laptop-battery-powersave"
-action_critical = "systemctl suspend"
+interval = 60                        # battery level check interval in seconds; optional; defaults to 120; integer
+
+[[action]]
+percentage = 0.25                    # run action below this threshold; required; decimal
+command = "./powersave.sh enable"    # CLI command to run; optional; string
+[action.notify]                      # Notification settings; optional; table
+summary = "Battery low!"             # Notification summary; required within action.notify table; string
+body = "Battery below $percentage%!" # Notification body; optional; string
+urgency = "Critical"                 # Notfication urgency; optional; defaults to `Normal`; enum[ Low | Normal | Critical ]
+icon = "battery-caution"             # Notification icon; optional; defaults to "battery-discharging"; string
+timeout = 0                          # Notification timeout in ms; optional; defaults to desktop default; integer; `0` means no timeout
 ```
 
 ## Logging

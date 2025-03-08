@@ -1,25 +1,175 @@
 mod config;
+mod template;
 
 #[macro_use]
 extern crate log;
 extern crate starship_battery;
-use config::Config;
-use notify_rust::{Notification, Timeout, Urgency};
+use anyhow::{Context, Result};
+use config::{xdg_config_home, Action, Config};
+use notify_rust::{Notification, Urgency};
 use starship_battery::State;
+use template::{FormatObject, Template};
 
 use std::path::PathBuf;
 use std::process::Command;
 use std::thread;
 
-#[derive(Debug, Eq, PartialEq)]
-enum Level {
-    Charged,
-    Low,
-    Critical,
+trait CommandRunner {
+    fn run(&mut self) -> Result<()>;
+    fn below_threshold(&self, value: f32) -> bool;
 }
 
-fn get_config(config_path: &PathBuf) -> Config {
-    let config_values = match std::fs::read_to_string(&config_path) {
+impl CommandRunner for Action {
+    fn run(&mut self) -> Result<()> {
+        let command = self.command.as_ref();
+        match command {
+            Some(cmd) => {
+                let status = Command::new(&cmd[0])
+                    .args(&cmd[1..])
+                    .status()
+                    .with_context(|| format!("Failed to execute '{}'", cmd.join(" ")))?;
+                if !status.success() {
+                    return Err(anyhow::anyhow!("Command failed: {}", status));
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+    fn below_threshold(&self, value: f32) -> bool {
+        value < self.percentage
+    }
+}
+
+trait DesktopNotification {
+    fn show(&mut self, format_obj: &FormatObject);
+    fn has_notify(&self) -> bool;
+    fn fill_template<T: Template>(&self, input_string: String, format_obj: &T) -> String;
+}
+
+impl DesktopNotification for Action {
+    fn show(&mut self, format_obj: &FormatObject) {
+        if let Some(n) = &self.notify {
+            let templated_summary = &self.fill_template(n.summary.clone(), format_obj);
+            let mut body = n.body.clone().unwrap_or(String::from(""));
+            body = self.fill_template(body, format_obj);
+            Notification::new()
+                .summary(templated_summary)
+                .body(body.as_str())
+                .icon(n.icon.as_str())
+                .urgency(n.urgency)
+                .timeout(n.timeout)
+                .show()
+                .ok();
+        }
+    }
+
+    fn has_notify(&self) -> bool {
+        self.notify.is_some()
+    }
+
+    fn fill_template<T: Template>(&self, input_string: String, format_obj: &T) -> String {
+        let mut result = input_string;
+        let format_string = format_obj.to_template();
+
+        // Replace template vars with templated values from FormatObject
+        for line in format_string.lines() {
+            let parts: Vec<&str> = line.split(": ").collect();
+            if parts.len() == 2 {
+                let placeholder = format!("${}", parts[0]);
+                result = result.replace(&placeholder, parts[1]);
+            }
+        }
+        result
+    }
+}
+
+fn main() -> Result<()> {
+    env_logger::init();
+
+    // Config
+    let config_path = xdg_config_home().join("battered/config.toml");
+    let config = get_config(&config_path).with_context(|| "Failed to read config")?;
+    let mut actions = config.action;
+    actions.sort_by(|a, b| {
+        a.percentage
+            .partial_cmp(&b.percentage)
+            .expect("Failed to sort actions by percentage")
+    }); // Sort by percentage
+
+    // Set up battery
+    let manager = starship_battery::Manager::new()?;
+    let mut first_battery = manager
+        .batteries()?
+        .next()
+        .with_context(|| "Failed to access battery information")??;
+
+    // Check and act on battery levels
+    let mut last_action_index: usize = usize::MAX;
+    loop {
+        manager.refresh(&mut first_battery)?;
+        let charge_value = first_battery.state_of_charge().value;
+        let state = first_battery.state();
+        info!("Charge: {:.2}", charge_value);
+        info!("State:  {}", state);
+
+        if state == State::Charging {
+            last_action_index = usize::MAX; // Reset state
+            thread::sleep(config.interval);
+            continue; // If the battery is charging there is nothing to do
+        }
+        match_actions(&mut actions, charge_value, &mut last_action_index)
+            .with_context(|| "Failed")?;
+        thread::sleep(config.interval);
+    }
+}
+
+fn match_actions<T: CommandRunner + DesktopNotification>(
+    actions: &mut [T],
+    charge_value: f32,
+    last_action_index: &mut usize,
+) -> Result<(), anyhow::Error> {
+    for (i, action) in (actions).iter_mut().enumerate() {
+        if action.below_threshold(charge_value) {
+            if i == *last_action_index {
+                break; // Action was already taken last iteration, nothing else to do
+            }
+            *last_action_index = i;
+            let percentage = (charge_value * 100.0).floor();
+            let format_obj = FormatObject {
+                percentage: &percentage,
+            };
+            match trigger_action(action, &format_obj) {
+                Ok(_) => (),
+                Err(e) => {
+                    // Show notification about failed action
+                    Notification::new()
+                        .summary("Battered action failed")
+                        .body(e.to_string().as_str())
+                        .urgency(Urgency::Critical)
+                        .show()
+                        .ok();
+                    return Err(e);
+                }
+            };
+            break;
+        };
+    }
+    Ok(())
+}
+
+fn trigger_action<A: CommandRunner + DesktopNotification>(
+    action: &mut A,
+    format_obj: &FormatObject,
+) -> Result<()> {
+    if action.has_notify() {
+        action.show(format_obj); // Show notification
+    }
+    action.run() // Run command
+}
+
+fn get_config(config_path: &PathBuf) -> Result<Config, anyhow::Error> {
+    let config_values = match std::fs::read_to_string(config_path) {
         Ok(config_values) => config_values,
         Err(e) => {
             if e.kind() == std::io::ErrorKind::NotFound {
@@ -29,109 +179,236 @@ fn get_config(config_path: &PathBuf) -> Config {
                 );
                 String::new()
             } else {
-                panic!(
-                    "Failed to read config at '{}'; {}",
-                    config_path.display(),
-                    e
-                );
+                return Err(anyhow::Error::from(e));
             }
         }
     };
-    toml::from_str(&config_values)
-        .expect(format!("Failed to parse config at '{}'", config_path.display()).as_str())
+    let config: Config = toml::from_str(&config_values)
+        .with_context(|| format!("Failed to parse config at '{}'", config_path.display()))?;
+    Ok(config)
 }
 
-fn main() -> starship_battery::Result<()> {
-    env_logger::init();
-    let config_path = xdg_config_home().join("battered/config.toml");
-    let config = get_config(&config_path);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use config::Notify;
+    use notify_rust::Timeout;
 
-    let action_low = &config.general.action_low.unwrap_or_default();
-    let action_critical = &config.general.action_critical.unwrap_or_default();
+    #[derive(Copy, Clone)]
+    struct MockNotify {}
 
-    let manager = starship_battery::Manager::new()?;
-    let mut first_battery = match manager.batteries()?.next() {
-        Some(Ok(first_battery)) => first_battery,
-        Some(Err(e)) => {
-            panic!("Unable to access battery information: {}", e);
-        }
-        _ => {
-            panic!("Unable to find any batteries");
-        }
-    };
-    let mut level = Level::Charged;
-
-    loop {
-        let charge_value = first_battery.state_of_charge().value;
-        let state = first_battery.state();
-        info!("Charge: {:.2}", charge_value);
-        info!("State:  {}", state);
-        if state != State::Charging && charge_value < config.general.threshold_critical {
-            if level != Level::Critical {
-                level = Level::Critical;
-                let mut notification = Notification::new();
-                // Send critical level notification
-                notification
-                    .summary("Battery low!")
-                    .body(format!("Battery below {}%", (charge_value * 100.0).trunc()).as_str())
-                    .icon("battery-caution")
-                    .urgency(Urgency::Critical)
-                    .timeout(Timeout::Never);
-                notification.show().ok();
-                // Run critical level custom action
-                if !action_critical.is_empty() {
-                    Command::new(&action_critical[0])
-                        .args(&action_critical[1..])
-                        .status()
-                        .unwrap_or_else(|error_code| {
-                            panic!(
-                                "Failed to execute '{}': {}",
-                                action_critical.join(" "),
-                                error_code
-                            )
-                        });
-                };
-            };
-        } else if state != State::Charging && charge_value < config.general.threshold_low {
-            if level != Level::Low {
-                level = Level::Low;
-                let mut notification = Notification::new();
-                // Send low level notification
-                notification
-                    .summary("Battery discharging")
-                    .body(format!("Battery below {}%", (charge_value * 100.0).trunc()).as_str())
-                    .icon("battery-low")
-                    .urgency(Urgency::Normal);
-                notification.show().ok();
-                // Run low level custom action
-                if !action_low.is_empty() {
-                    Command::new(&action_low[0])
-                        .args(&action_low[1..])
-                        .status()
-                        .unwrap_or_else(|error_code| {
-                            panic!(
-                                "Failed to execute '{}': {}",
-                                action_low.join(" "),
-                                error_code
-                            )
-                        });
-                };
-            };
-        } else {
-            level = Level::Charged;
-        };
-        thread::sleep(config.general.interval);
-        manager.refresh(&mut first_battery)?;
+    #[derive(Copy, Clone)]
+    struct MockAction {
+        show_call_count: usize,
+        run_call_count: usize,
+        notify: Option<MockNotify>,
+        percentage: f32,
     }
-}
 
-// Taken from i3status-rust
-pub fn xdg_config_home() -> PathBuf {
-    // In the unlikely event that $HOME is not set, it doesn't really matter
-    // what we fall back on, so use /.config.
-    let config_path = std::env::var("XDG_CONFIG_HOME").unwrap_or(format!(
-        "{}/.config",
-        std::env::var("HOME").unwrap_or_else(|_| "".to_string())
-    ));
-    PathBuf::from(&config_path)
+    impl DesktopNotification for MockAction {
+        fn show(&mut self, _format_obj: &FormatObject) {
+            self.show_call_count += 1;
+        }
+        fn has_notify(&self) -> bool {
+            self.notify.is_some()
+        }
+        fn fill_template<T: Template>(&self, _input_string: String, _format_obj: &T) -> String {
+            String::from("")
+        }
+    }
+
+    impl CommandRunner for MockAction {
+        fn run(&mut self) -> Result<()> {
+            self.run_call_count += 1;
+            Ok(())
+        }
+        fn below_threshold(&self, value: f32) -> bool {
+            value < self.percentage
+        }
+    }
+
+    #[test]
+    fn test_has_notify() {
+        let action_w_notify = Action {
+            percentage: 0.5,
+            command: None,
+            notify: Some(Notify {
+                summary: String::from(""),
+                body: None,
+                urgency: Urgency::Low,
+                icon: String::from(""),
+                timeout: Timeout::Default,
+            }),
+        };
+        let has_notify = action_w_notify.has_notify();
+        assert_eq!(has_notify, true);
+    }
+
+    #[test]
+    fn test_has_no_notify() {
+        let action_w_notify = Action {
+            percentage: 0.5,
+            command: None,
+            notify: None,
+        };
+        let has_notify = action_w_notify.has_notify();
+        assert_eq!(has_notify, false);
+    }
+
+    #[test]
+    fn test_handle_threshold_without_notification() {
+        let mut action = MockAction {
+            show_call_count: 0,
+            run_call_count: 0,
+            percentage: 0.5,
+            notify: None,
+        };
+        let format_obj = FormatObject { percentage: &50.0 };
+        let result = trigger_action(&mut action, &format_obj);
+        assert!(result.is_ok());
+        assert_eq!(action.show_call_count, 0);
+        assert_eq!(action.run_call_count, 1);
+    }
+
+    #[test]
+    fn test_handle_threshold_with_notification() {
+        let mock_notify = MockNotify {};
+        let mut action = MockAction {
+            run_call_count: 0,
+            show_call_count: 0,
+            percentage: 0.5,
+            notify: Some(mock_notify),
+        };
+
+        let format_obj = FormatObject { percentage: &50.0 };
+        let result = trigger_action(&mut action, &format_obj);
+        assert!(result.is_ok());
+        assert_eq!(action.show_call_count, 1);
+        assert_eq!(action.run_call_count, 1);
+    }
+
+    #[test]
+    fn test_threshold_below_threshold_fn() {
+        let action = Action {
+            percentage: 0.5,
+            command: None,
+            notify: None,
+        };
+        let charge_value_below = 0.3; // Value below percentage threshold
+        let charge_value_above = 0.8; // Value below percentage threshold
+
+        let below_result = action.below_threshold(charge_value_below);
+        assert_eq!(below_result, true);
+
+        let above_result = action.below_threshold(charge_value_above);
+        assert_eq!(above_result, false);
+    }
+
+    #[test]
+    fn test_threshold_action_above_threshold() {
+        let mock_notify = MockNotify {};
+        let action = MockAction {
+            run_call_count: 0,
+            show_call_count: 0,
+            percentage: 0.5,
+            notify: Some(mock_notify),
+        };
+        let charge_value = 0.7; // Value above percentage threshold
+
+        let mut actions = vec![action];
+        let mut last_action_index: usize = 0;
+        let result = match_actions(&mut actions, charge_value, &mut last_action_index);
+        assert!(result.is_ok());
+        assert_eq!(action.show_call_count, 0);
+        assert_eq!(action.run_call_count, 0);
+    }
+
+    #[test]
+    fn test_threshold_action_below_threshold() {
+        let action = MockAction {
+            run_call_count: 0,
+            show_call_count: 0,
+            percentage: 0.5,
+            notify: None,
+        };
+        let charge_value = 0.3; // Value below percentage threshold
+
+        let mut actions = vec![action]; // Creates a copy
+        let mut last_action_index = usize::MAX;
+        let result = match_actions(&mut actions, charge_value, &mut last_action_index);
+
+        let result_action = actions[0];
+        assert!(result.is_ok());
+        assert_eq!(result_action.run_call_count, 1);
+    }
+
+    #[test]
+    fn test_template_replaces_percentage() {
+        let summary = String::from("Percentage is $percentage%!");
+        let body = String::from("$percentage is also in the body");
+        let action_w_notify = Action {
+            percentage: 0.5,
+            command: None,
+            notify: Some(Notify {
+                summary: summary.clone(),
+                body: Some(body.clone()),
+                urgency: Urgency::Low,
+                icon: String::from(""),
+                timeout: Timeout::Default,
+            }),
+        };
+        let format_obj = FormatObject { percentage: &42.0 };
+        let summary_result = action_w_notify.fill_template(summary, &format_obj);
+        assert_eq!(summary_result, "Percentage is 42%!");
+        let body_result = action_w_notify.fill_template(body, &format_obj);
+        assert_eq!(body_result, "42 is also in the body");
+    }
+
+    #[test]
+    fn test_template_replaces_nothing() {
+        let summary = String::from("No percentage to replace here!");
+        let action_w_notify = Action {
+            percentage: 0.5,
+            command: None,
+            notify: Some(Notify {
+                summary: summary.clone(),
+                body: None,
+                urgency: Urgency::Low,
+                icon: String::from(""),
+                timeout: Timeout::Default,
+            }),
+        };
+        let format_obj = FormatObject { percentage: &42.0 };
+        let result = action_w_notify.fill_template(summary, &format_obj);
+        assert_eq!(result, "No percentage to replace here!");
+    }
+
+    #[test]
+    fn test_template_does_not_replace_unknown() {
+        let summary = String::from("No $value to replace here!");
+        let action_w_notify = Action {
+            percentage: 0.5,
+            command: None,
+            notify: Some(Notify {
+                summary: summary.clone(),
+                body: None,
+                urgency: Urgency::Low,
+                icon: String::from(""),
+                timeout: Timeout::Default,
+            }),
+        };
+        let format_obj = FormatObject { percentage: &42.0 };
+        let result = action_w_notify.fill_template(summary, &format_obj);
+        assert_eq!(result, "No $value to replace here!");
+    }
+
+    #[test]
+    fn test_get_config_from_invalid_path() {
+        let result = get_config(&PathBuf::from("/dev/null"));
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Failed to parse config at '/dev/null'"
+        );
+    }
 }

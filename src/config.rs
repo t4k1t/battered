@@ -1,57 +1,53 @@
+use notify_rust::{Timeout, Urgency};
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer};
 use serde_with::{serde_as, DurationSeconds};
 use shell_words::split as shell_split;
+use std::path::PathBuf;
 use std::time::Duration;
-
-#[derive(Debug, Deserialize)]
-pub struct Config {
-    #[serde(default = "default_general_config")]
-    pub general: GeneralConfig,
-}
 
 #[serde_as]
 #[derive(Debug, Deserialize)]
-pub struct GeneralConfig {
-    #[serde(
-        default = "default_threshold_low",
-        deserialize_with = "deserialize_float_percentage"
-    )]
-    pub threshold_low: f32,
-    #[serde(
-        default = "default_threshold_critical",
-        deserialize_with = "deserialize_float_percentage"
-    )]
-    pub threshold_critical: f32,
+pub struct Config {
     #[serde_as(as = "DurationSeconds<u64>")]
     #[serde(default = "default_interval")]
     pub interval: Duration,
-    #[serde(default, deserialize_with = "deserialize_command")]
-    pub action_low: Option<Vec<String>>,
-    #[serde(default, deserialize_with = "deserialize_command")]
-    pub action_critical: Option<Vec<String>>,
+    pub action: Vec<Action>,
 }
 
-fn default_threshold_low() -> f32 {
-    0.8
+#[derive(Debug, Deserialize)]
+pub struct Action {
+    #[serde(deserialize_with = "deserialize_float_percentage")]
+    pub percentage: f32,
+    #[serde(default, deserialize_with = "deserialize_command")]
+    pub command: Option<Vec<String>>,
+    pub notify: Option<Notify>,
 }
 
-fn default_threshold_critical() -> f32 {
-    0.25
+#[serde_as]
+#[derive(Debug, Deserialize, Clone)]
+pub struct Notify {
+    pub summary: String,
+    #[serde(default)]
+    pub body: Option<String>,
+    #[serde(default = "default_urgency", deserialize_with = "deserialize_urgency")]
+    pub urgency: Urgency,
+    #[serde(default = "default_icon")]
+    pub icon: String,
+    #[serde(default, deserialize_with = "deserialize_timeout")]
+    pub timeout: Timeout,
+}
+
+fn default_urgency() -> Urgency {
+    Urgency::Normal
+}
+
+fn default_icon() -> String {
+    "battery-caution".to_string()
 }
 
 fn default_interval() -> Duration {
     Duration::from_secs(60)
-}
-
-fn default_general_config() -> GeneralConfig {
-    GeneralConfig {
-        threshold_low: default_threshold_low(),
-        threshold_critical: default_threshold_critical(),
-        interval: default_interval(),
-        action_low: None,
-        action_critical: None,
-    }
 }
 
 fn deserialize_float_percentage<'de, D>(deserializer: D) -> Result<f32, D::Error>
@@ -61,7 +57,7 @@ where
     // Deserialize float
     let value: f32 = Deserialize::deserialize(deserializer)?;
     // Check valid range
-    if value < 0.0 || value > 1.0 {
+    if !(0.0..=1.0).contains(&value) {
         return Err(D::Error::custom("value must be between 0 and 1"));
     }
     Ok(value)
@@ -79,123 +75,259 @@ where
         Err(e) => Err(D::Error::custom(format!("Failed to split command: {}", e))),
     }
 }
+fn deserialize_urgency<'de, D>(deserializer: D) -> Result<Urgency, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    // Deserialize the string
+    let value: String = String::deserialize(deserializer)?;
+    // Attempt to parse the notification urgency
+    match Urgency::try_from(value.as_str()) {
+        Ok(urgency) => Ok(urgency),
+        Err(e) => Err(D::Error::custom(format!(
+            "Failed to parse notification urgency: {}",
+            e
+        ))),
+    }
+}
+
+fn deserialize_timeout<'de, D>(deserializer: D) -> Result<Timeout, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    // Deserialize the integer
+    let value: i32 = i32::deserialize(deserializer)?;
+    Ok(Timeout::from(value))
+}
+
+// Taken from i3status-rust
+pub fn xdg_config_home() -> PathBuf {
+    // In the unlikely event that $HOME is not set, it doesn't really matter
+    // what we fall back on, so use /.config.
+    let config_path = std::env::var("XDG_CONFIG_HOME").unwrap_or(format!(
+        "{}/.config",
+        std::env::var("HOME").unwrap_or_else(|_| "".to_string())
+    ));
+    PathBuf::from(&config_path)
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+    use std::sync::Mutex;
     use toml;
+
+    static ENV_VAR_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_valid_config() {
         let toml_str = r#"
-        [general]
         interval = 120
-        threshold_low = 0.9
-        threshold_critical = 0.1
-        action_low = "./powersave.sh profile laptop-battery-powersave"
+
+        [[action]]
+        percentage = 0.84
+        command = "./powersave.sh profile laptop-battery-powersave"
+        [action.notify]
+        summary = "Battery discharging"
+        urgency = "Low"
+        icon = "battery-discharging"
+        timeout = 10000
         action_critical = "./powersave.sh suspend"
         "#;
 
         let config: Config = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.general.interval, Duration::from_secs(120));
-        assert_eq!(config.general.threshold_low, 0.9);
-        assert_eq!(config.general.threshold_critical, 0.1);
+        assert_eq!(config.interval, Duration::from_secs(120));
+        assert_eq!(config.action[0].percentage, 0.84);
         assert_eq!(
-            config.general.action_low,
+            config.action[0].command,
             Some(vec![
                 "./powersave.sh".to_string(),
                 "profile".to_string(),
                 "laptop-battery-powersave".to_string()
             ])
         );
-        assert_eq!(
-            config.general.action_critical,
-            Some(vec!["./powersave.sh".to_string(), "suspend".to_string(),])
-        );
+        let notify = config.action[0].notify.as_ref().unwrap();
+        assert_eq!(notify.summary, "Battery discharging");
+        assert_eq!(notify.urgency, Urgency::Low);
+        assert_eq!(notify.icon, "battery-discharging");
+        assert_eq!(notify.timeout, Timeout::Milliseconds(10000));
     }
 
     #[test]
-    fn test_default_values_for_general_section() {
+    fn test_default_values() {
         let toml_str = r#"
-        [general]
+
+        # At least one actions is required
+        [[action]]
+        percentage = 0.99
         "#;
 
         let config: Config = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.general.interval, Duration::from_secs(60));
-        assert_eq!(config.general.threshold_low, 0.8);
-        assert_eq!(config.general.threshold_critical, 0.25);
-        assert_eq!(config.general.action_low, None);
-        assert_eq!(config.general.action_critical, None);
+        assert_eq!(config.interval, Duration::from_secs(60));
     }
 
     #[test]
-    fn test_empty_config_loads_default_values() {
-        let config: Config = toml::from_str("").unwrap();
-        assert_eq!(config.general.interval, Duration::from_secs(60));
-        assert_eq!(config.general.threshold_low, 0.8);
-        assert_eq!(config.general.threshold_critical, 0.25);
+    fn test_default_timeout_never_value() {
+        let toml_str = r#"
+
+        # At least one actions is required
+        [[action]]
+        percentage = 0.99
+        [action.notify]
+        summary = "Never Gonna Give You Up"
+        timeout = 0
+        "#; // `0` means no timeout
+
+        let config: Config = toml::from_str(toml_str).unwrap();
+        let notify = config.action[0].notify.as_ref().unwrap();
+        assert_eq!(notify.timeout, Timeout::Never);
+    }
+
+    #[test]
+    fn test_missing_actions() {
+        let toml_str = r#"
+        "#;
+
+        let result: Result<Config, toml::de::Error> = toml::from_str(toml_str);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().message(), "missing field `action`");
     }
 
     #[test]
     fn test_invalid_interval_type() {
         let toml_str = r#"
-        [general]
+        # Interval has to be valid Duration
         interval = "not_a_number"
-        "#; // Interval has to be valid Duration
+
+        [[action]]
+        percentage = 0.99
+        "#;
 
         let result: Result<Config, toml::de::Error> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_invalid_threshold_low_type() {
-        let toml_str = r#"
-        [general]
-        threshold_low = -0.2
-        "#; // Thresholds have to be positive floating point numbers
+    fn test_invalid_percentage_values() {
+        let test_values = vec![
+            r#"
+            [[action]]
+            percentage = -0.2
+            "#,
+            r#"
+            [[action]]
+            percentage = 42
+            "#,
+            r#"
+            [[action]]
+            percentage = "0.5"
+            "#,
+        ]; // Thresholds have to be positive floating point numbers between 0 and 1
 
-        let result: Result<Config, toml::de::Error> = toml::from_str(toml_str);
-        assert!(result.is_err());
+        for (i, value) in test_values.iter().enumerate() {
+            let result: Result<Config, toml::de::Error> = toml::from_str(value);
+            assert!(result.is_err());
+            if i == 0 || i == 1 {
+                assert_eq!(
+                    result.unwrap_err().message(),
+                    "value must be between 0 and 1"
+                );
+            } else {
+                assert!(result.unwrap_err().message().starts_with("invalid type"));
+            };
+        }
     }
 
     #[test]
-    fn test_invalid_threshold_low_value() {
-        let toml_str = r#"
-        [general]
-        threshold_low = 3.14
-        "#; // Thresholds have to be between 0 and 1
+    fn test_invalid_urgency_values() {
+        let string_test_values = vec![
+            r#"
+            [[action]]
+            percentage = 0.9
+            [action.notify]
+            urgency = ""
+            "#,
+            r#"
+            [[action]]
+            percentage = 0.9
+            [action.notify]
+            urgency = "Whatever"
+            "#,
+        ];
+        let other_test_values = vec![
+            r#"
+            [[action]]
+            percentage = 0.9
+            [action.notify]
+            urgency = 1
+            "#,
+            r#"
+            [[action]]
+            percentage = 0.9
+            [action.notify]
+            urgency = ["Critical", "Normal"]
+            "#,
+        ];
 
-        let result: Result<Config, toml::de::Error> = toml::from_str(toml_str);
-        assert!(result.is_err());
+        for value in string_test_values {
+            let result: Result<Config, toml::de::Error> = toml::from_str(value);
+            assert!(result.is_err());
+            assert!(result
+                .unwrap_err()
+                .message()
+                .starts_with("Failed to parse notification urgency"));
+        }
+        for value in other_test_values {
+            let result: Result<Config, toml::de::Error> = toml::from_str(value);
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message().starts_with("invalid type"));
+        }
     }
 
     #[test]
-    fn test_invalid_threshold_critical_value() {
-        let toml_str = r#"
-        [general]
-        threshold_critical = 1/2
-        "#; // Thresholds have to be positive floating point numbers
+    fn test_invalid_timeout_values() {
+        let string_test_values = vec![
+            r#"
+            [[action]]
+            percentage = 0.9
+            [action.notify]
+            timeout = "500"
+            "#,
+            r#"
+            [[action]]
+            percentage = 0.9
+            [action.notify]
+            # Timeout has to be i32
+            timeout = 600.0
+            "#,
+        ];
 
-        let result: Result<Config, toml::de::Error> = toml::from_str(toml_str);
-        assert!(result.is_err());
+        for value in string_test_values {
+            let result: Result<Config, toml::de::Error> = toml::from_str(value);
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message().starts_with("invalid type"));
+        }
+
+        let toml_str = r#"
+        # Interval has to be valid Duration
+        [[action]]
+        percentage = 0.99
+        [action.notify]
+        summary = ""
+        timeout = -5
+        "#; // Negative timeout is silently converted to `Timeout::Default` by notify-rust
+        let config: Config = toml::from_str(toml_str).unwrap();
+        let notify = config.action[0].notify.as_ref().unwrap();
+        assert_eq!(notify.timeout, Timeout::Default);
     }
 
     #[test]
-    fn test_invalid_action_low_value() {
+    fn test_unparsable_command_value() {
         let toml_str = r#"
-        [general]
-        action_low = 42
-        "#; // Invalid action_low value
-
-        let result: Result<Config, toml::de::Error> = toml::from_str(toml_str);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_unparsable_action_low_value() {
-        let toml_str = r#"
-        [general]
-        action_low = "notify-send 'Oops, I am missing my closing single quote!"
+        [[action]]
+        percentage = 0.99
+        command = "notify-send 'Oops, I am missing my closing single quote!"
         "#; // Unbalanced quotes cannot be parsed correctly
 
         let result: Result<Config, toml::de::Error> = toml::from_str(toml_str);
@@ -204,5 +336,31 @@ mod tests {
             result.unwrap_err().message(),
             "Failed to split command: missing closing quote"
         );
+    }
+
+    #[test]
+    fn test_xdg_config_home() {
+        let _lock = ENV_VAR_MUTEX.lock().unwrap();
+        env::set_var("XDG_CONFIG_HOME", "/home/battered/.config");
+        let config_home = xdg_config_home();
+        assert_eq!(config_home, PathBuf::from("/home/battered/.config"));
+    }
+
+    #[test]
+    fn test_xdg_config_home_from_home_var() {
+        let _lock = ENV_VAR_MUTEX.lock().unwrap();
+        env::remove_var("XDG_CONFIG_HOME");
+        env::set_var("HOME", "/home/battered");
+        let config_home = xdg_config_home();
+        assert_eq!(config_home, PathBuf::from("/home/battered/.config"));
+    }
+
+    #[test]
+    fn test_xdg_config_home_from_nothing() {
+        let _lock = ENV_VAR_MUTEX.lock().unwrap();
+        env::remove_var("XDG_CONFIG_HOME");
+        env::remove_var("HOME");
+        let config_home = xdg_config_home();
+        assert_eq!(config_home, PathBuf::from("/.config"));
     }
 }
