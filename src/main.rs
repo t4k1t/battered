@@ -5,7 +5,7 @@ mod template;
 extern crate log;
 extern crate starship_battery;
 use anyhow::{Context, Result};
-use config::{xdg_config_home, Action, Config};
+use config::{xdg_config_home, Action, Config, OnAcAction};
 use notify_rust::{Notification, Urgency};
 use starship_battery::State;
 use template::{FormatObject, Template};
@@ -16,7 +16,7 @@ use std::thread;
 
 trait CommandRunner {
     fn run(&mut self) -> Result<()>;
-    fn below_threshold(&self, value: f32) -> bool;
+    fn exceeds_threshold(&self, value: f32) -> bool;
 }
 
 impl CommandRunner for Action {
@@ -36,8 +36,32 @@ impl CommandRunner for Action {
             _ => Ok(()),
         }
     }
-    fn below_threshold(&self, value: f32) -> bool {
+
+    fn exceeds_threshold(&self, value: f32) -> bool {
         value < self.percentage
+    }
+}
+
+impl CommandRunner for OnAcAction {
+    fn run(&mut self) -> Result<()> {
+        let command = self.command.as_ref();
+        match command {
+            Some(cmd) => {
+                let status = Command::new(&cmd[0])
+                    .args(&cmd[1..])
+                    .status()
+                    .with_context(|| format!("Failed to execute '{}'", cmd.join(" ")))?;
+                if !status.success() {
+                    return Err(anyhow::anyhow!("Command failed: {}", status));
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn exceeds_threshold(&self, value: f32) -> bool {
+        value >= self.percentage
     }
 }
 
@@ -48,6 +72,43 @@ trait DesktopNotification {
 }
 
 impl DesktopNotification for Action {
+    fn show(&mut self, format_obj: &FormatObject) {
+        if let Some(n) = &self.notify {
+            let templated_summary = &self.fill_template(n.summary.clone(), format_obj);
+            let mut body = n.body.clone().unwrap_or(String::from(""));
+            body = self.fill_template(body, format_obj);
+            Notification::new()
+                .summary(templated_summary)
+                .body(body.as_str())
+                .icon(n.icon.as_str())
+                .urgency(n.urgency)
+                .timeout(n.timeout)
+                .show()
+                .ok();
+        }
+    }
+
+    fn has_notify(&self) -> bool {
+        self.notify.is_some()
+    }
+
+    fn fill_template<T: Template>(&self, input_string: String, format_obj: &T) -> String {
+        let mut result = input_string;
+        let format_string = format_obj.to_template();
+
+        // Replace template vars with templated values from FormatObject
+        for line in format_string.lines() {
+            let parts: Vec<&str> = line.split(": ").collect();
+            if parts.len() == 2 {
+                let placeholder = format!("${}", parts[0]);
+                result = result.replace(&placeholder, parts[1]);
+            }
+        }
+        result
+    }
+}
+
+impl DesktopNotification for OnAcAction {
     fn show(&mut self, format_obj: &FormatObject) {
         if let Some(n) = &self.notify {
             let templated_summary = &self.fill_template(n.summary.clone(), format_obj);
@@ -109,17 +170,45 @@ fn main() -> Result<()> {
     loop {
         manager.refresh(&mut first_battery)?;
         let charge_value = first_battery.state_of_charge().value;
+        let percentage = (charge_value * 100.0).floor();
         let state = first_battery.state();
+        let mut on_ac = config.on_ac.clone();
         info!("Charge: {:.2}", charge_value);
         info!("State:  {}", state);
 
+        let format_obj = FormatObject {
+            percentage: &percentage,
+        };
         if state == State::Charging {
-            last_action_index = usize::MAX; // Reset state
+            if last_action_index != usize::MAX {
+                debug!("Switch to charging"); // TODO: Remove?
+                last_action_index = usize::MAX; // Reset state
+                if let Some(on_ac) = &mut on_ac {
+                    match trigger_action(on_ac, &format_obj) {
+                        Ok(_) => (),
+                        Err(e) => {
+                            // Show notification about failed action
+                            Notification::new()
+                                .summary("Battered action failed")
+                                .body(e.to_string().as_str())
+                                .urgency(Urgency::Critical)
+                                .show()
+                                .ok();
+                            return Err(e);
+                        }
+                    };
+                }
+            }
             thread::sleep(config.interval);
-            continue; // If the battery is charging there is nothing to do
+            continue; // If the battery is charging there is nothing else to do
         }
-        match_actions(&mut actions, charge_value, &mut last_action_index)
-            .with_context(|| "Failed")?;
+        match_actions(
+            &mut actions,
+            charge_value,
+            &mut last_action_index,
+            &format_obj,
+        )
+        .with_context(|| "Failed")?;
         thread::sleep(config.interval);
     }
 }
@@ -128,18 +217,15 @@ fn match_actions<T: CommandRunner + DesktopNotification>(
     actions: &mut [T],
     charge_value: f32,
     last_action_index: &mut usize,
+    format_obj: &FormatObject,
 ) -> Result<(), anyhow::Error> {
     for (i, action) in (actions).iter_mut().enumerate() {
-        if action.below_threshold(charge_value) {
+        if action.exceeds_threshold(charge_value) {
             if i == *last_action_index {
                 break; // Action was already taken last iteration, nothing else to do
             }
             *last_action_index = i;
-            let percentage = (charge_value * 100.0).floor();
-            let format_obj = FormatObject {
-                percentage: &percentage,
-            };
-            match trigger_action(action, &format_obj) {
+            match trigger_action(action, format_obj) {
                 Ok(_) => (),
                 Err(e) => {
                     // Show notification about failed action
@@ -222,7 +308,7 @@ mod tests {
             self.run_call_count += 1;
             Ok(())
         }
-        fn below_threshold(&self, value: f32) -> bool {
+        fn exceeds_threshold(&self, value: f32) -> bool {
             value < self.percentage
         }
     }
@@ -297,10 +383,10 @@ mod tests {
         let charge_value_below = 0.3; // Value below percentage threshold
         let charge_value_above = 0.8; // Value below percentage threshold
 
-        let below_result = action.below_threshold(charge_value_below);
+        let below_result = action.exceeds_threshold(charge_value_below);
         assert_eq!(below_result, true);
 
-        let above_result = action.below_threshold(charge_value_above);
+        let above_result = action.exceeds_threshold(charge_value_above);
         assert_eq!(above_result, false);
     }
 
@@ -317,7 +403,13 @@ mod tests {
 
         let mut actions = vec![action];
         let mut last_action_index: usize = 0;
-        let result = match_actions(&mut actions, charge_value, &mut last_action_index);
+        let format_obj = FormatObject { percentage: &70.0 };
+        let result = match_actions(
+            &mut actions,
+            charge_value,
+            &mut last_action_index,
+            &format_obj,
+        );
         assert!(result.is_ok());
         assert_eq!(action.show_call_count, 0);
         assert_eq!(action.run_call_count, 0);
@@ -335,7 +427,13 @@ mod tests {
 
         let mut actions = vec![action]; // Creates a copy
         let mut last_action_index = usize::MAX;
-        let result = match_actions(&mut actions, charge_value, &mut last_action_index);
+        let format_obj = FormatObject { percentage: &30.0 };
+        let result = match_actions(
+            &mut actions,
+            charge_value,
+            &mut last_action_index,
+            &format_obj,
+        );
 
         let result_action = actions[0];
         assert!(result.is_ok());

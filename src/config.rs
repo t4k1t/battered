@@ -13,11 +13,24 @@ pub struct Config {
     #[serde(default = "default_interval")]
     pub interval: Duration,
     pub action: Vec<Action>,
+    pub on_ac: Option<OnAcAction>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Action {
     #[serde(deserialize_with = "deserialize_float_percentage")]
+    pub percentage: f32,
+    #[serde(default, deserialize_with = "deserialize_command")]
+    pub command: Option<Vec<String>>,
+    pub notify: Option<Notify>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct OnAcAction {
+    #[serde(
+        default = "default_ac_percentage",
+        deserialize_with = "deserialize_float_percentage"
+    )]
     pub percentage: f32,
     #[serde(default, deserialize_with = "deserialize_command")]
     pub command: Option<Vec<String>>,
@@ -48,6 +61,10 @@ fn default_icon() -> String {
 
 fn default_interval() -> Duration {
     Duration::from_secs(60)
+}
+
+fn default_ac_percentage() -> f32 {
+    0.0
 }
 
 fn deserialize_float_percentage<'de, D>(deserializer: D) -> Result<f32, D::Error>
