@@ -181,7 +181,6 @@ fn main() -> Result<()> {
         };
         if state == State::Charging {
             if last_action_index != usize::MAX {
-                debug!("Switch to charging"); // TODO: Remove?
                 last_action_index = usize::MAX; // Reset state
                 if let Some(on_ac) = &mut on_ac {
                     match trigger_action(on_ac, &format_obj) {
@@ -438,6 +437,18 @@ mod tests {
         let result_action = actions[0];
         assert!(result.is_ok());
         assert_eq!(result_action.run_call_count, 1);
+    }
+
+    #[test]
+    fn test_handle_noop_action() {
+        let mut action = Action {
+            percentage: 0.5,
+            notify: None,
+            command: Some(vec![String::from("true")]),
+        };
+        let format_obj = FormatObject { percentage: &50.0 };
+        let result = trigger_action(&mut action, &format_obj);
+        assert!(result.is_ok());
     }
 
     #[test]

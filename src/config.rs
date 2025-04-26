@@ -150,7 +150,6 @@ mod tests {
         urgency = "Low"
         icon = "battery-discharging"
         timeout = 10000
-        action_critical = "./powersave.sh suspend"
         "#;
 
         let config: Config = toml::from_str(toml_str).unwrap();
@@ -379,5 +378,42 @@ mod tests {
         env::remove_var("HOME");
         let config_home = xdg_config_home();
         assert_eq!(config_home, PathBuf::from("/.config"));
+    }
+
+    #[test]
+    fn test_valid_onac_action() {
+        let toml_str = r#"
+        interval = 120
+
+        [[action]]
+        percentage = 0.84
+        [action.notify]
+        summary = "Battery discharging"
+
+        [on_ac]
+        percentage = 0.00
+        command = "./powersave.sh profile ac"
+        [on_ac.notify]
+        summary = "Battery charging"
+        urgency = "Low"
+        icon = "battery-good-charging"
+        "#;
+
+        let config: Config = toml::from_str(toml_str).unwrap();
+        let on_ac = config.on_ac.clone();
+        assert_eq!(config.interval, Duration::from_secs(120));
+        assert_eq!(config.action[0].percentage, 0.84);
+        assert_eq!(
+            on_ac.as_ref().unwrap().command,
+            Some(vec![
+                "./powersave.sh".to_string(),
+                "profile".to_string(),
+                "ac".to_string()
+            ])
+        );
+        let notify = on_ac.as_ref().unwrap().notify.as_ref().unwrap();
+        assert_eq!(notify.summary, "Battery charging");
+        assert_eq!(notify.urgency, Urgency::Low);
+        assert_eq!(notify.icon, "battery-good-charging");
     }
 }
