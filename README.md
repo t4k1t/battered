@@ -4,7 +4,7 @@
 
 <img height="128" alt="battered Icon" src="https://raw.githubusercontent.com/t4k1t/battered/main/assets/icon/battered-icon.svg" align="left">
 
-Regularly polls battery levels and reacts to crossing configurable thresholds.
+Make the most of your laptop's battery life with custom actions and informative desktop notifications.
 
 For example, it could send a notification to call attention to the battery discharging, call a script to start battery saving mode on crossing the next threshold, and send another - persistent - notification when the battery level gets critical.
 
@@ -49,10 +49,10 @@ The `summary` and `body` fields of the `[action.notify]` table support optional 
 
 Example config:
 ```
-interval = 60                        # battery level check interval in seconds; optional; defaults to 120; integer
+interval = 60                        # Battery level check interval in seconds; optional; defaults to 120; integer
 
 [[action]]
-percentage = 0.25                    # run action below this threshold; required; decimal
+percentage = 0.25                    # Run action below this threshold; required; decimal
 command = "./powersave.sh enable"    # CLI command to run; optional; string
 [action.notify]                      # Notification settings; optional; table
 summary = "Battery low!"             # Notification summary; required within action.notify table; string
@@ -60,6 +60,23 @@ body = "Battery below $percentage%!" # Notification body; optional; string
 urgency = "Critical"                 # Notfication urgency; optional; defaults to `Normal`; enum[ Low | Normal | Critical ]
 icon = "battery-caution"             # Notification icon; optional; defaults to "battery-discharging"; string
 timeout = 0                          # Notification timeout in ms; optional; defaults to desktop default; integer; `0` means no timeout
+
+# There can be as many `action` entries as desired, and order doesn't matter
+[[action]]
+percentage = 0.95
+[action.notify]
+summary = "Battery discharging"
+
+# Special action to run once connected to AC
+# Options are the same as for regular actions
+[on_ac]
+percentage = 0.10                  # Only run if battery level above this threshold; optional; decimal
+command = "./powersave.sh disable"
+[on_ac.notify]
+summary = "Battery charging"
+urgency = "Low"
+icon = "battery-good-charging"
+timeout = 300
 ```
 
 ## Logging
