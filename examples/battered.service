@@ -1,11 +1,13 @@
 [Unit]
-Description=A battery notification daemon
+Description=battered - Battery level action and notification daemon
 After=multi-user.target
 
 [Service]
 Type=simple
 Environment=RUST_LOG=WARN
 ExecStart=/usr/bin/battered
+Restart=on-failure
+RestartSec=30
 
 [Install]
 WantedBy=default.target
