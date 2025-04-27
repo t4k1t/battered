@@ -12,12 +12,12 @@ For example, it could send a notification to call attention to the battery disch
 
 **Table of Contents**
 
-- [Features](#⭐-features)
-- [Usage](#💡-usage)
-- [Installation](#📦-installation)
-- [Configuration](#⚙️-configuration)
-- [Logging](#📋-logging)
-- [License](#📜-license)
+- [Features](#-features)
+- [Usage](#-usage)
+- [Installation](#-installation)
+- [Configuration](#-configuration)
+- [Logging](#-logging)
+- [License](#-license)
 
 ## ⭐ Features
 
