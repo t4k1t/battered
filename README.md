@@ -12,21 +12,21 @@ For example, it could send a notification to call attention to the battery disch
 
 **Table of Contents**
 
-- [Features](#-features)
-- [Usage](#-usage)
-- [Installation](#-installation)
-- [Configuration](#-configuration)
-- [Logging](#-logging)
-- [License](#-license)
+- [Features](#features)
+- [Usage](#usage)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Logging](#logging)
+- [License](#license)
 
-## ⭐ Features
+## Features
 
 - Unlimited custom actions
 - Customizable desktop notifications with placeholder values
 - Optional action and notification on connecting power supply
 - Configurable poll interval
 
-## 💡 Usage
+## Usage
 
 First, make sure you've [configured](#configuration) some actions. Then simply run `battered`:
 
@@ -34,7 +34,7 @@ First, make sure you've [configured](#configuration) some actions. Then simply r
 battered
 ```
 
-## 📦 Installation
+## Installation
 
 `battered` is available on [crates.io](https://crates.io/crates/battered) and can be installed from there:
 
@@ -48,7 +48,7 @@ If you're using Arch Linux you can also install it from the AUR, using your favo
 paru -Syu battered
 ```
 
-## ⚙️ Configuration
+## Configuration
 
 battered looks for a configuration file in the following places:
 1. `$XDG_CONFIG_HOME/battered/config.toml`
@@ -93,10 +93,10 @@ icon = "battery-good-charging"
 timeout = 300
 ```
 
-## 📋 Logging
+## Logging
 
 Logging is configured via the `RUST_LOG` env variable. The provided systemd unit example sets the log level to `WARN` per default.
 
-## 📜 License
+## License
 
 `battered` is distributed under the terms of the [MIT](https://spdx.org/licenses/MIT.html) license.
