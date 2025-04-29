@@ -9,6 +9,7 @@ repository = "https://github.com/t4k1t/battered"
 readme = "README.md"
 keywords = ["battery", "linux", "notification", "cli", "command"]
 categories = ["command-line-utilities"]
+exclude = [".github/*"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
