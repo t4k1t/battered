@@ -215,7 +215,6 @@ fn pick_battery(
     batteries: &mut Batteries,
     serial_number: Option<&str>,
 ) -> Result<Battery, anyhow::Error> {
-    // TODO: Unit tests
     let mut selected_battery: Option<Battery> = None;
     match serial_number {
         Some(serial) => {
