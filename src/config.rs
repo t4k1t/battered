@@ -14,7 +14,6 @@ pub struct Config {
     pub interval: Duration,
     pub action: Vec<Action>,
     pub on_ac: Option<OnAcAction>,
-    // TODO: Unit tests
     #[serde(default, deserialize_with = "deserialize_serial_number")]
     pub serial_number: Option<String>,
 }
@@ -155,6 +154,7 @@ mod tests {
     fn test_valid_config() {
         let toml_str = r#"
         interval = 120
+        serial_number = "31415"
 
         [[action]]
         percentage = 0.84
@@ -168,6 +168,7 @@ mod tests {
 
         let config: Config = toml::from_str(toml_str).unwrap();
         assert_eq!(config.interval, Duration::from_secs(120));
+        assert_eq!(config.serial_number, Some("31415".to_string()));
         assert_eq!(config.action[0].percentage, 0.84);
         assert_eq!(
             config.action[0].command,
@@ -188,20 +189,21 @@ mod tests {
     fn test_default_values() {
         let toml_str = r#"
 
-        # At least one actions is required
+        # At least one action is required
         [[action]]
         percentage = 0.99
         "#;
 
         let config: Config = toml::from_str(toml_str).unwrap();
         assert_eq!(config.interval, Duration::from_secs(60));
+        assert_eq!(config.serial_number, None);
     }
 
     #[test]
     fn test_default_timeout_never_value() {
         let toml_str = r#"
 
-        # At least one actions is required
+        # At least one action is required
         [[action]]
         percentage = 0.99
         [action.notify]
@@ -429,5 +431,37 @@ mod tests {
         assert_eq!(notify.summary, "Battery charging");
         assert_eq!(notify.urgency, Urgency::Low);
         assert_eq!(notify.icon, "battery-good-charging");
+    }
+
+    #[test]
+    fn test_serial_number_trimming() {
+        let toml_str = r#"
+        serial_number = "    31415 "
+
+        # At least one action is required
+        [[action]]
+        percentage = 0.99
+        "#;
+
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.serial_number, Some("31415".to_string()));
+    }
+
+    #[test]
+    fn test_invalid_serial_number() {
+        let toml_str = r#"
+            serial_number = 1234
+
+            # At least one action is required
+            [[action]]
+            percentage = 0.99
+            "#;
+
+        let result: Result<Config, toml::de::Error> = toml::from_str(toml_str);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .message()
+            .starts_with("invalid type: integer"));
     }
 }
