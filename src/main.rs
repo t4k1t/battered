@@ -232,7 +232,7 @@ fn pick_battery(
             match selected_battery {
                 Some(battery) => Ok(battery),
                 None => Err(anyhow::Error::msg(format!(
-                    "Faild to find battery with serial number '{}'",
+                    "Failed to find battery with serial number '{}'",
                     serial
                 ))),
             }
@@ -549,6 +549,26 @@ mod tests {
         assert_eq!(
             result.unwrap_err().to_string(),
             "Failed to parse config at '/dev/null'"
+        );
+    }
+
+    #[test]
+    fn test_pick_first_battery() {
+        let manager = starship_battery::Manager::new().unwrap();
+        let mut batteries = manager.batteries().unwrap();
+        let result = pick_battery(&mut batteries, None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_pick_battery_by_serial_not_found() {
+        let manager = starship_battery::Manager::new().unwrap();
+        let mut batteries = manager.batteries().unwrap();
+        let result = pick_battery(&mut batteries, Some("not-a-serial-number"));
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Failed to find battery with serial number 'not-a-serial-number'"
         );
     }
 }
