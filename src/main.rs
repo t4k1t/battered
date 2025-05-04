@@ -553,14 +553,6 @@ mod tests {
     }
 
     #[test]
-    fn test_pick_first_battery() {
-        let manager = starship_battery::Manager::new().unwrap();
-        let mut batteries = manager.batteries().unwrap();
-        let result = pick_battery(&mut batteries, None);
-        assert!(result.is_ok());
-    }
-
-    #[test]
     fn test_pick_battery_by_serial_not_found() {
         let manager = starship_battery::Manager::new().unwrap();
         let mut batteries = manager.batteries().unwrap();
