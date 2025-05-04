@@ -7,7 +7,7 @@ extern crate starship_battery;
 use anyhow::{Context, Result};
 use config::{xdg_config_home, Action, Config, OnAcAction};
 use notify_rust::{Notification, Urgency};
-use starship_battery::State;
+use starship_battery::{Batteries, Battery, State};
 use template::{FormatObject, Template};
 
 use std::path::PathBuf;
@@ -158,20 +158,19 @@ fn main() -> Result<()> {
             .expect("Failed to sort actions by percentage")
     }); // Sort by percentage
 
-    // Set up battery
+    // Set up battery manager
     let manager = starship_battery::Manager::new()?;
-    let mut first_battery = manager
-        .batteries()?
-        .next()
-        .with_context(|| "Failed to access battery information")??;
+    let mut batteries = manager.batteries()?;
+    debug!("Looking for serial number: {:?}", config.serial_number);
+    let mut battery = pick_battery(&mut batteries, config.serial_number.as_deref())?;
 
     // Check and act on battery levels
     let mut last_action_index: usize = usize::MAX;
     loop {
-        manager.refresh(&mut first_battery)?;
-        let charge_value = first_battery.state_of_charge().value;
+        manager.refresh(&mut battery)?;
+        let charge_value = battery.state_of_charge().value;
         let percentage = (charge_value * 100.0).floor();
-        let state = first_battery.state();
+        let state = battery.state();
         let mut on_ac = config.on_ac.clone();
         info!("Charge: {:.2}", charge_value);
         info!("State:  {}", state);
@@ -209,6 +208,39 @@ fn main() -> Result<()> {
         )
         .with_context(|| "Failed")?;
         thread::sleep(config.interval);
+    }
+}
+
+fn pick_battery(
+    batteries: &mut Batteries,
+    serial_number: Option<&str>,
+) -> Result<Battery, anyhow::Error> {
+    // TODO: Unit tests
+    let mut selected_battery: Option<Battery> = None;
+    match serial_number {
+        Some(serial) => {
+            for battery in batteries {
+                let battery_ref = battery.with_context(|| "Failed to access battery")?;
+                let battery_serial_number = battery_ref
+                    .serial_number()
+                    .with_context(|| "Failed to get serial number from battery")?
+                    .trim();
+                if battery_serial_number == serial {
+                    selected_battery = Some(battery_ref);
+                    break;
+                }
+            }
+            match selected_battery {
+                Some(battery) => Ok(battery),
+                None => Err(anyhow::Error::msg(format!(
+                    "Faild to find battery with serial number '{}'",
+                    serial
+                ))),
+            }
+        }
+        None => Ok(batteries
+            .next()
+            .with_context(|| "Failed to access battery information")??),
     }
 }
 

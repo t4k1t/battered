@@ -42,7 +42,7 @@ battered
 cargo install battered
 ```
 
-If you're using Arch Linux you can also install it from the AUR, using your favorite AUR helper (e.g. `paru`):
+If you're using Arch Linux you can also install it from the AUR using your favorite AUR helper (e.g. `paru`):
 
 ```bash
 paru -Syu battered
@@ -61,9 +61,16 @@ The `summary` and `body` fields of the `[action.notify]` table support optional 
 | --- | --- |
 | `$percentage` | Current battery level in percent |
 
-Example config:
+By default `battered` will monitor the first battery it finds. Use the `serial_number` config value to pick a specific battery instead.
+One way to find the serial number is through sysfs. E.g. find the serial number of `BAT0`:
+```bash
+cat /sys/class/power_supply/BAT0/serial_number
 ```
+
+Example config:
+```toml
 interval = 60                        # Battery level check interval in seconds; optional; defaults to 120; integer
+serial_number = "31415"              # Serial number of battery; optional; defaults to first battery; string
 
 [[action]]
 percentage = 0.25                    # Run action below this threshold; required; decimal
@@ -81,7 +88,7 @@ percentage = 0.95
 [action.notify]
 summary = "Battery discharging"
 
-# Special action to run once connected to AC
+# Special action to run after connecting to AC
 # Options are the same as for regular actions
 [on_ac]
 percentage = 0.10                  # Only run if battery level above this threshold; optional; decimal
@@ -95,7 +102,7 @@ timeout = 300
 
 ## Logging
 
-Logging is configured via the `RUST_LOG` env variable. The provided systemd unit example sets the log level to `WARN` per default.
+Logging is configured via the `RUST_LOG` env variable. The provided systemd unit example sets the log level to `WARN` by default.
 
 ## License
 
