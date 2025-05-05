@@ -372,7 +372,7 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_threshold_without_notification() {
+    fn test_threshold_without_notification() {
         let mut action = MockAction {
             show_call_count: 0,
             run_call_count: 0,
@@ -387,7 +387,7 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_threshold_with_notification() {
+    fn test_threshold_with_notification() {
         let mock_notify = MockNotify {};
         let mut action = MockAction {
             run_call_count: 0,
@@ -471,7 +471,7 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_noop_action() {
+    fn test_successful_action() {
         let mut action = Action {
             percentage: 0.5,
             notify: None,
@@ -483,11 +483,93 @@ mod tests {
     }
 
     #[test]
+    fn test_no_action() {
+        let mut action = Action {
+            percentage: 0.5,
+            notify: None,
+            command: None,
+        };
+        let format_obj = FormatObject { percentage: &50.0 };
+        let result = trigger_action(&mut action, &format_obj);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_failing_action() {
+        let mut action = Action {
+            percentage: 0.5,
+            notify: None,
+            command: Some(vec![String::from("false")]),
+        };
+        let format_obj = FormatObject { percentage: &50.0 };
+        let result = trigger_action(&mut action, &format_obj);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_successful_on_ac_action() {
+        let mut action = OnAcAction {
+            percentage: 0.0,
+            notify: None,
+            command: Some(vec![String::from("true")]),
+        };
+        let format_obj = FormatObject { percentage: &50.0 };
+        let result = trigger_action(&mut action, &format_obj);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_no_on_ac_action() {
+        let mut action = OnAcAction {
+            percentage: 0.1,
+            notify: None,
+            command: None,
+        };
+        let format_obj = FormatObject { percentage: &50.0 };
+        let result = trigger_action(&mut action, &format_obj);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_failing_on_ac_action() {
+        let mut action = OnAcAction {
+            percentage: 0.0,
+            notify: None,
+            command: Some(vec![String::from("false")]),
+        };
+        let format_obj = FormatObject { percentage: &50.0 };
+        let result = trigger_action(&mut action, &format_obj);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_template_replaces_percentage() {
         let summary = String::from("Percentage is $percentage%!");
         let body = String::from("$percentage is also in the body");
         let action_w_notify = Action {
             percentage: 0.5,
+            command: None,
+            notify: Some(Notify {
+                summary: summary.clone(),
+                body: Some(body.clone()),
+                urgency: Urgency::Low,
+                icon: String::from(""),
+                timeout: Timeout::Default,
+            }),
+        };
+        let format_obj = FormatObject { percentage: &42.0 };
+        let summary_result = action_w_notify.fill_template(summary, &format_obj);
+        assert_eq!(summary_result, "Percentage is 42%!");
+        let body_result = action_w_notify.fill_template(body, &format_obj);
+        assert_eq!(body_result, "42 is also in the body");
+    }
+
+    #[test]
+    fn test_template_replaces_percentage_for_on_ac_action() {
+        let summary = String::from("Percentage is $percentage%!");
+        let body = String::from("$percentage is also in the body");
+        let action_w_notify = OnAcAction {
+            percentage: 0.21,
             command: None,
             notify: Some(Notify {
                 summary: summary.clone(),
