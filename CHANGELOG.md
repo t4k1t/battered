@@ -10,10 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Support for monitoring specific battery by serial number
+- justfile for development
 
 ### Changed
 
 - Updated dependencies
+- Use reference for threshold check
+- Remove .github-actions from crate
+- Spruce up README a little
 
 ## [0.7.0] - 2025-04-27
 
