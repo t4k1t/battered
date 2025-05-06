@@ -24,3 +24,7 @@ alias cov := coverage
     echo "Publishing to crates.io"
     cargo login
     cargo publish
+
+@debug:
+    echo "Running with debug logging"
+    RUST_LOG=debug cargo run
