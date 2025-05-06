@@ -16,7 +16,7 @@ use std::thread;
 
 trait CommandRunner {
     fn run(&mut self) -> Result<()>;
-    fn exceeds_threshold(&self, value: f32) -> bool;
+    fn exceeds_threshold(&self, value: &f32) -> bool;
 }
 
 impl CommandRunner for Action {
@@ -37,8 +37,8 @@ impl CommandRunner for Action {
         }
     }
 
-    fn exceeds_threshold(&self, value: f32) -> bool {
-        value < self.percentage
+    fn exceeds_threshold(&self, value: &f32) -> bool {
+        value < &self.percentage
     }
 }
 
@@ -60,8 +60,8 @@ impl CommandRunner for OnAcAction {
         }
     }
 
-    fn exceeds_threshold(&self, value: f32) -> bool {
-        value >= self.percentage
+    fn exceeds_threshold(&self, value: &f32) -> bool {
+        value >= &self.percentage
     }
 }
 
@@ -202,7 +202,7 @@ fn main() -> Result<()> {
         }
         match_actions(
             &mut actions,
-            charge_value,
+            &charge_value,
             &mut last_action_index,
             &format_obj,
         )
@@ -245,7 +245,7 @@ fn pick_battery(
 
 fn match_actions<T: CommandRunner + DesktopNotification>(
     actions: &mut [T],
-    charge_value: f32,
+    charge_value: &f32,
     last_action_index: &mut usize,
     format_obj: &FormatObject,
 ) -> Result<(), anyhow::Error> {
@@ -338,8 +338,8 @@ mod tests {
             self.run_call_count += 1;
             Ok(())
         }
-        fn exceeds_threshold(&self, value: f32) -> bool {
-            value < self.percentage
+        fn exceeds_threshold(&self, value: &f32) -> bool {
+            value < &self.percentage
         }
     }
 
@@ -413,10 +413,10 @@ mod tests {
         let charge_value_below = 0.3; // Value below percentage threshold
         let charge_value_above = 0.8; // Value below percentage threshold
 
-        let below_result = action.exceeds_threshold(charge_value_below);
+        let below_result = action.exceeds_threshold(&charge_value_below);
         assert_eq!(below_result, true);
 
-        let above_result = action.exceeds_threshold(charge_value_above);
+        let above_result = action.exceeds_threshold(&charge_value_above);
         assert_eq!(above_result, false);
     }
 
@@ -436,7 +436,7 @@ mod tests {
         let format_obj = FormatObject { percentage: &70.0 };
         let result = match_actions(
             &mut actions,
-            charge_value,
+            &charge_value,
             &mut last_action_index,
             &format_obj,
         );
@@ -460,7 +460,7 @@ mod tests {
         let format_obj = FormatObject { percentage: &30.0 };
         let result = match_actions(
             &mut actions,
-            charge_value,
+            &charge_value,
             &mut last_action_index,
             &format_obj,
         );
