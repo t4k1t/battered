@@ -2,11 +2,11 @@
 
 [![crates.io](https://img.shields.io/crates/v/battered?logo=rust)](https://crates.io/crates/battered)
 
-<img height="128" alt="battered Icon" src="https://raw.githubusercontent.com/t4k1t/battered/main/assets/icon/battered-icon.svg" align="left">
+<img height="64" alt="battered Icon" src="https://raw.githubusercontent.com/t4k1t/battered/main/assets/icon/battered-icon.svg" align="left">
 
 Make the most of your laptop's battery life with custom actions and informative desktop notifications.
 
-For example, it could send a notification to call attention to the battery discharging, call a script to start battery saving mode on crossing the next threshold, and send another - persistent - notification when the battery level gets critical.
+Written in Rust, `battered` uses minimal system resources.
 
 -----
 
