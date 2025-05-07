@@ -1,6 +1,6 @@
 [package]
 name = "battered"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 license = "MIT"
 description = "Make the most of your laptop's battery life with custom actions and informative desktop notifications."
