@@ -10,6 +10,7 @@ use notify_rust::{Notification, Urgency};
 use starship_battery::{Batteries, Battery, State};
 use template::{FormatObject, Template};
 
+use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 use std::thread;
@@ -145,8 +146,19 @@ impl DesktopNotification for OnAcAction {
     }
 }
 
+fn get_version_from_env() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 fn main() -> Result<()> {
     env_logger::init();
+
+    // Handle CLI args
+    let args: Vec<String> = env::args().collect();
+    if args.len() > 1 && (args[1] == "--version" || args[1] == "-V") {
+        println!("battered {}", get_version_from_env());
+        return Ok(());
+    }
 
     // Config
     let config_path = xdg_config_home().join("battered/config.toml");
