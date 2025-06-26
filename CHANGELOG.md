@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-`-V|--version` CLI arg
+- `-V|--version` CLI arg
+- man pages
 
 ## [0.8.0] - 2025-05-07
 
