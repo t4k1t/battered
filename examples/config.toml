@@ -32,3 +32,15 @@ urgency = "Critical"
 icon = "battery-caution"
 # `0` means never time out
 timeout = 0
+
+# Special action to run after connecting to AC
+# Options are the same as for regular actions
+[on_ac]
+# Only run if battery level above this threshold; for `[on_ac]` this is optional
+percentage = 0.10
+command = "./powersave.sh disable"
+[on_ac.notify]
+summary = "Battery charging"
+urgency = "Low"
+icon = "battery-good-charging"
+timeout = 300
