@@ -189,6 +189,8 @@ fn main() -> Result<()> {
 
         let format_obj = FormatObject {
             percentage: &percentage,
+            state: &state.to_string(),
+            energy_rate: &battery.energy_rate().value,
         };
         if state == State::Charging {
             if last_action_index != usize::MAX {

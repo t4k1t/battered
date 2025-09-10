@@ -22,6 +22,12 @@ macro_rules! impl_template {
 
 pub struct FormatObject<'f> {
     pub percentage: &'f f32,
+    pub state: &'f str,
+    pub energy_rate: &'f f32,
 }
 
-impl_template!(FormatObject { percentage });
+impl_template!(FormatObject {
+    percentage,
+    state,
+    energy_rate
+});

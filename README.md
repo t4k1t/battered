@@ -60,6 +60,8 @@ The `summary` and `body` fields of the `[action.notify]` table support optional 
 | Placeholder | Description |
 | --- | --- |
 | `$percentage` | Current battery level in percent |
+| `$state` | Current battery state, e.g. "discharging" |
+| `$energy_rate` | Amount of energy drained from the battery in Watts |
 
 By default `battered` will monitor the first battery it finds. Use the `serial_number` config value to pick a specific battery instead.
 One way to find the serial number is through sysfs. E.g. find the serial number of `BAT0`:
