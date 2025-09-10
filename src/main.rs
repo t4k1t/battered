@@ -323,6 +323,8 @@ mod tests {
     use super::*;
     use config::Notify;
     use notify_rust::Timeout;
+    const DUMMY_STATE: &str = "discharging";
+    const DUMMY_ENERGY_RATE: f32 = 32.0;
 
     #[derive(Copy, Clone)]
     struct MockNotify {}
@@ -393,7 +395,11 @@ mod tests {
             percentage: 0.5,
             notify: None,
         };
-        let format_obj = FormatObject { percentage: &50.0 };
+        let format_obj = FormatObject {
+            percentage: &50.0,
+            state: &DUMMY_STATE,
+            energy_rate: &DUMMY_ENERGY_RATE,
+        };
         let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_ok());
         assert_eq!(action.show_call_count, 0);
@@ -410,7 +416,11 @@ mod tests {
             notify: Some(mock_notify),
         };
 
-        let format_obj = FormatObject { percentage: &50.0 };
+        let format_obj = FormatObject {
+            percentage: &50.0,
+            state: &DUMMY_STATE,
+            energy_rate: &DUMMY_ENERGY_RATE,
+        };
         let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_ok());
         assert_eq!(action.show_call_count, 1);
@@ -447,7 +457,11 @@ mod tests {
 
         let mut actions = vec![action];
         let mut last_action_index: usize = 0;
-        let format_obj = FormatObject { percentage: &70.0 };
+        let format_obj = FormatObject {
+            percentage: &70.0,
+            state: &DUMMY_STATE,
+            energy_rate: &DUMMY_ENERGY_RATE,
+        };
         let result = match_actions(
             &mut actions,
             &charge_value,
@@ -471,7 +485,11 @@ mod tests {
 
         let mut actions = vec![action]; // Creates a copy
         let mut last_action_index = usize::MAX;
-        let format_obj = FormatObject { percentage: &30.0 };
+        let format_obj = FormatObject {
+            percentage: &30.0,
+            state: &DUMMY_STATE,
+            energy_rate: &DUMMY_ENERGY_RATE,
+        };
         let result = match_actions(
             &mut actions,
             &charge_value,
@@ -491,7 +509,11 @@ mod tests {
             notify: None,
             command: Some(vec![String::from("true")]),
         };
-        let format_obj = FormatObject { percentage: &50.0 };
+        let format_obj = FormatObject {
+            percentage: &50.0,
+            state: &DUMMY_STATE,
+            energy_rate: &DUMMY_ENERGY_RATE,
+        };
         let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_ok());
     }
@@ -503,7 +525,11 @@ mod tests {
             notify: None,
             command: None,
         };
-        let format_obj = FormatObject { percentage: &50.0 };
+        let format_obj = FormatObject {
+            percentage: &50.0,
+            state: &DUMMY_STATE,
+            energy_rate: &DUMMY_ENERGY_RATE,
+        };
         let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_ok());
     }
@@ -515,7 +541,11 @@ mod tests {
             notify: None,
             command: Some(vec![String::from("false")]),
         };
-        let format_obj = FormatObject { percentage: &50.0 };
+        let format_obj = FormatObject {
+            percentage: &50.0,
+            state: &DUMMY_STATE,
+            energy_rate: &DUMMY_ENERGY_RATE,
+        };
         let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_err());
     }
@@ -527,7 +557,11 @@ mod tests {
             notify: None,
             command: Some(vec![String::from("true")]),
         };
-        let format_obj = FormatObject { percentage: &50.0 };
+        let format_obj = FormatObject {
+            percentage: &50.0,
+            state: &DUMMY_STATE,
+            energy_rate: &DUMMY_ENERGY_RATE,
+        };
         let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_ok());
     }
@@ -539,7 +573,11 @@ mod tests {
             notify: None,
             command: None,
         };
-        let format_obj = FormatObject { percentage: &50.0 };
+        let format_obj = FormatObject {
+            percentage: &50.0,
+            state: &DUMMY_STATE,
+            energy_rate: &DUMMY_ENERGY_RATE,
+        };
         let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_ok());
     }
@@ -551,7 +589,11 @@ mod tests {
             notify: None,
             command: Some(vec![String::from("false")]),
         };
-        let format_obj = FormatObject { percentage: &50.0 };
+        let format_obj = FormatObject {
+            percentage: &50.0,
+            state: &DUMMY_STATE,
+            energy_rate: &DUMMY_ENERGY_RATE,
+        };
         let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_err());
     }
@@ -571,7 +613,11 @@ mod tests {
                 timeout: Timeout::Default,
             }),
         };
-        let format_obj = FormatObject { percentage: &42.0 };
+        let format_obj = FormatObject {
+            percentage: &42.0,
+            state: &DUMMY_STATE,
+            energy_rate: &DUMMY_ENERGY_RATE,
+        };
         let summary_result = action_w_notify.fill_template(summary, &format_obj);
         assert_eq!(summary_result, "Percentage is 42%!");
         let body_result = action_w_notify.fill_template(body, &format_obj);
@@ -593,7 +639,11 @@ mod tests {
                 timeout: Timeout::Default,
             }),
         };
-        let format_obj = FormatObject { percentage: &42.0 };
+        let format_obj = FormatObject {
+            percentage: &42.0,
+            state: &DUMMY_STATE,
+            energy_rate: &DUMMY_ENERGY_RATE,
+        };
         let summary_result = action_w_notify.fill_template(summary, &format_obj);
         assert_eq!(summary_result, "Percentage is 42%!");
         let body_result = action_w_notify.fill_template(body, &format_obj);
@@ -614,7 +664,11 @@ mod tests {
                 timeout: Timeout::Default,
             }),
         };
-        let format_obj = FormatObject { percentage: &42.0 };
+        let format_obj = FormatObject {
+            percentage: &42.0,
+            state: &DUMMY_STATE,
+            energy_rate: &DUMMY_ENERGY_RATE,
+        };
         let result = action_w_notify.fill_template(summary, &format_obj);
         assert_eq!(result, "No percentage to replace here!");
     }
@@ -633,7 +687,11 @@ mod tests {
                 timeout: Timeout::Default,
             }),
         };
-        let format_obj = FormatObject { percentage: &42.0 };
+        let format_obj = FormatObject {
+            percentage: &42.0,
+            state: &DUMMY_STATE,
+            energy_rate: &DUMMY_ENERGY_RATE,
+        };
         let result = action_w_notify.fill_template(summary, &format_obj);
         assert_eq!(result, "No $value to replace here!");
     }
