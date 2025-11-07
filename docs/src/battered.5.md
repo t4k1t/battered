@@ -24,7 +24,7 @@ The _summary_ and _body_ fields of the _[action.notify]_ table support optional 
 # GENERAL SETTINGS
 
 **interval** <seconds>
-: Battery level check interval in seconds. Defaults to 120.
+: Battery level check interval in seconds. Defaults to 60.
 
 **serial_number** <battery-serial-number>
 : Specifies which battery to monitor, if device has multiple batteries. If this is not set, **battered** will pick the first battery it finds.
@@ -64,7 +64,7 @@ The **notify** sub-table makes it easy to configure desktop notifications for ac
 **icon**
 : Choose an icon for the desktop notification. Optional.
 
-**timeout** <seconds>
+**timeout** <milliseconds>
 : Set a timeout for the desktop notification. Setting this to 0 means the notification will never time out. Optional.
 
 # ON_AC

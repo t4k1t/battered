@@ -1,6 +1,9 @@
 # battered
 
 [![crates.io](https://img.shields.io/crates/v/battered?logo=rust)](https://crates.io/crates/battered)
+![AUR Version](https://img.shields.io/aur/version/battered)
+[![codecov](https://codecov.io/gh/t4k1t/battered/graph/badge.svg?token=CIMW9ARSPC)](https://codecov.io/gh/t4k1t/battered)
+![Crates.io License](https://img.shields.io/crates/l/battered)
 
 <img height="64" alt="battered Icon" src="https://raw.githubusercontent.com/t4k1t/battered/main/assets/icon/battered-icon.svg" align="left">
 
@@ -10,14 +13,7 @@ Written in Rust, `battered` uses minimal system resources.
 
 -----
 
-**Table of Contents**
-
-- [Features](#features)
-- [Usage](#usage)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Logging](#logging)
-- [License](#license)
+[Features](#features) • [Usage](#usage) • [Installation](#installation) • [Configuration](#configuration) • [Logging](#logging) • [License](#license)
 
 ## Features
 
@@ -71,7 +67,7 @@ cat /sys/class/power_supply/BAT0/serial_number
 
 Example config:
 ```toml
-interval = 60                        # Battery level check interval in seconds; optional; defaults to 120; integer
+interval = 60                        # Battery level check interval in seconds; optional; defaults to 60; integer
 serial_number = "31415"              # Serial number of battery; optional; defaults to first battery; string
 
 [[action]]

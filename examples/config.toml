@@ -1,4 +1,6 @@
 interval = 60
+# Optionally select a specific battery via serial number
+serial_number = "31415"
 
 [[action]]
 # Order of actions doesn't matter - they get sorted by percentage at runtime

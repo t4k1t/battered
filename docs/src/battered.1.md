@@ -22,6 +22,16 @@ Make the most of your laptop's battery life with custom actions and informative 
 **-V**, **\--version**
 : Print version information.
 
+# CONFIGURATION FILE
+
+**battered** reads its configuration from a file in one of the following locations (checked in order):
+
+1. _$XDG_CONFIG_HOME/battered/config.toml_
+2. _$HOME/.config/battered/config.toml_
+3. _/.config/battered/config.toml_ (if HOME is not set)
+
+A minimal configuration file must contain at least one `[[action]]` entry. See battered(5) for details on configuration options.
+
 # ENVIRONMENT
 
 **battered** can be configured using environment variables.
