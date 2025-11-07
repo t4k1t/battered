@@ -8,7 +8,7 @@ battered - Make the most of your battery life with custom actions and desktop no
 
 # SYNOPSIS
 
-**battered** [**-V**|**\--version**]
+**battered** [OPTIONS]
 
 # DESCRIPTION
 
@@ -16,8 +16,11 @@ Make the most of your laptop's battery life with custom actions and informative 
 
 # OPTIONS
 
+**-h**, **\--help**
+: Print help information.
+
 **-V**, **\--version**
-: Prints version information.
+: Print version information.
 
 # ENVIRONMENT
 
