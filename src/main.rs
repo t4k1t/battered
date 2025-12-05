@@ -6,7 +6,7 @@ extern crate log;
 extern crate starship_battery;
 use anyhow::{Context, Result};
 use config::{xdg_config_home, Action, Config, OnAcAction};
-use notify_rust::{Notification, Urgency};
+use notify_rust::Notification;
 use starship_battery::{Batteries, Battery, State};
 use template::{FormatObject, Template};
 
@@ -14,6 +14,45 @@ use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 use std::thread;
+
+#[cfg(target_os = "macos")]
+mod cross_notification {
+    use notify_rust::{Notification, Timeout, Urgency};
+
+    pub fn show(body: &str, summary: &str, _urgency: Urgency, _timeout: Timeout, _icon: &str) {
+        Notification::new().summary(summary).body(body).show().ok();
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod cross_notification {
+    use notify_rust::{Notification, Timeout, Urgency};
+
+    pub fn show(body: &str, summary: &str, _urgency: Urgency, timeout: Timeout, _icon: &str) {
+        Notification::new()
+            .summary(summary)
+            .body(body)
+            .timeout(timeout)
+            .show()
+            .ok();
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod cross_notification {
+    use notify_rust::{Notification, Timeout, Urgency};
+
+    pub fn show(body: &str, summary: &str, urgency: Urgency, timeout: Timeout, icon: &str) {
+        Notification::new()
+            .summary(summary)
+            .body(body)
+            .icon(icon)
+            .urgency(urgency)
+            .timeout(timeout)
+            .show()
+            .ok();
+    }
+}
 
 trait CommandRunner {
     fn run(&mut self) -> Result<()>;
@@ -78,14 +117,7 @@ impl DesktopNotification for Action {
             let templated_summary = &self.fill_template(n.summary.clone(), format_obj);
             let mut body = n.body.clone().unwrap_or(String::from(""));
             body = self.fill_template(body, format_obj);
-            Notification::new()
-                .summary(templated_summary)
-                .body(body.as_str())
-                .icon(n.icon.as_str())
-                .urgency(n.urgency)
-                .timeout(n.timeout)
-                .show()
-                .ok();
+            cross_notification::show(&body, templated_summary, n.urgency, n.timeout, &n.icon);
         }
     }
 
@@ -115,14 +147,7 @@ impl DesktopNotification for OnAcAction {
             let templated_summary = &self.fill_template(n.summary.clone(), format_obj);
             let mut body = n.body.clone().unwrap_or(String::from(""));
             body = self.fill_template(body, format_obj);
-            Notification::new()
-                .summary(templated_summary)
-                .body(body.as_str())
-                .icon(n.icon.as_str())
-                .urgency(n.urgency)
-                .timeout(n.timeout)
-                .show()
-                .ok();
+            cross_notification::show(&body, templated_summary, n.urgency, n.timeout, &n.icon);
         }
     }
 
@@ -150,6 +175,17 @@ fn get_version_from_env() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+#[cfg(target_os = "macos")]
+fn setup_app() {
+    use notify_rust::{get_bundle_identifier_or_default, set_application};
+
+    let app_id = get_bundle_identifier_or_default("battered");
+    let _ = set_application(&app_id);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn setup_app() {}
+
 fn main() -> Result<()> {
     env_logger::init();
 
@@ -169,6 +205,8 @@ fn main() -> Result<()> {
             .partial_cmp(&b.percentage)
             .expect("Failed to sort actions by percentage")
     }); // Sort by percentage
+
+    setup_app();
 
     // Set up battery manager
     let manager = starship_battery::Manager::new()?;
@@ -203,7 +241,6 @@ fn main() -> Result<()> {
                             Notification::new()
                                 .summary("Battered action failed")
                                 .body(e.to_string().as_str())
-                                .urgency(Urgency::Critical)
                                 .show()
                                 .ok();
                             return Err(e);
@@ -276,7 +313,6 @@ fn match_actions<T: CommandRunner + DesktopNotification>(
                     Notification::new()
                         .summary("Battered action failed")
                         .body(e.to_string().as_str())
-                        .urgency(Urgency::Critical)
                         .show()
                         .ok();
                     return Err(e);
@@ -322,7 +358,7 @@ fn get_config(config_path: &PathBuf) -> Result<Config, anyhow::Error> {
 mod tests {
     use super::*;
     use config::Notify;
-    use notify_rust::Timeout;
+    use notify_rust::{Timeout, Urgency};
     const DUMMY_STATE: &str = "discharging";
     const DUMMY_ENERGY_RATE: f32 = 32.0;
 
@@ -706,6 +742,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn test_pick_battery_by_serial_not_found() {
         let manager = starship_battery::Manager::new().unwrap();

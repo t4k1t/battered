@@ -21,6 +21,7 @@ Written in Rust, `battered` uses minimal system resources.
 - Customizable desktop notifications with placeholder values
 - Optional action and notification on connecting power supply
 - Configurable poll interval
+- Cross-platform: Mac OS and Linux
 
 ## Usage
 
@@ -97,6 +98,10 @@ urgency = "Low"
 icon = "battery-good-charging"
 timeout = 300
 ```
+
+### Mac OS notifications
+
+On Mac OS there are some limitations to notifications. Only the `body` and `summary` options have an effect. The `urgency`, `timeout`, and `icon` options can be set, but will be ignored.
 
 ## Logging
 
