@@ -6,8 +6,8 @@ alias cov := coverage
     cargo test
 
 # generate coverage report
-@coverage REPORT_TYPE='Html':
-    cargo tarpaulin --out {{REPORT_TYPE}}
+@coverage REPORT_TYPE='html':
+    cargo llvm-cov --{{REPORT_TYPE}}
 
 # clean dist
 @clean:
