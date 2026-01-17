@@ -191,10 +191,19 @@ fn main() -> Result<()> {
 
     // Handle CLI args
     let args: Vec<String> = env::args().collect();
-    if args.len() > 1 && (args[1] == "--version" || args[1] == "-V") {
+    if args.len() > 1 && (args[1] == "--help" || args[1] == "-h") {
+        let help_text = "Usage: battered [OPTIONS]
+
+Options:
+  -V, --version  Show the version and exit.
+  -h, --help     Show this message and exit.
+";
+        print!("{}", help_text);
+        return Ok(());
+    } else if args.len() > 1 && (args[1] == "--version" || args[1] == "-V") {
         println!("battered {}", get_version_from_env());
         return Ok(());
-    }
+    };
 
     // Config
     let config_path = xdg_config_home().join("battered/config.toml");
