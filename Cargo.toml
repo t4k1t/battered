@@ -25,4 +25,4 @@ serde = { version = "1.0", features = ["derive"] }
 serde_with = "3.14"
 shell-words = "1.1"
 starship-battery = "0.10"
-toml = "0.8"
+toml = "0.9"

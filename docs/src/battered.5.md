@@ -33,7 +33,7 @@ The _summary_ and _body_ fields of the _[action.notify]_ table support optional 
 : At least on action has to be configured. See ACTIONS for more details.
 
 **\[on_ac\]** <table>
-: Optional. See ON_AC for a description.
+: Optional. See ON\_AC for a description.
 
 # ACTIONS
 
@@ -52,6 +52,8 @@ Actions are the main way to configure the behavior of **battered**. They specify
 
 The **notify** sub-table makes it easy to configure desktop notifications for actions. It can be omitted entirely if showing a desktop notification is not desired.
 
+On Mac OS there are some limitations to notifications: Only the **body** and **summary** options have an effect. The **urgency**, **timeout**, and **icon** options can be set, but will be ignored.
+
 **summary** <text>
 : Summary, or title, of the desktop notification. Optional.
 
@@ -67,7 +69,7 @@ The **notify** sub-table makes it easy to configure desktop notifications for ac
 **timeout** <milliseconds>
 : Set a timeout for the desktop notification. Setting this to 0 means the notification will never time out. Optional.
 
-# ON_AC
+# ON\_AC
 
 The **\[on_ac\]** action is a special, optional, action which runs once the monitored battery is connected to a power supply. It takes the same settings as an action - the only difference is that here the percentage is optional.
 

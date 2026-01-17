@@ -12,7 +12,7 @@ battered - Make the most of your battery life with custom actions and desktop no
 
 # DESCRIPTION
 
-Make the most of your laptop's battery life with custom actions and informative desktop notifications.
+Make the most of your battery life with custom actions and informative desktop notifications.
 
 # OPTIONS
 

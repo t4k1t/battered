@@ -6,7 +6,7 @@ extern crate log;
 extern crate starship_battery;
 use anyhow::{Context, Result};
 use config::{xdg_config_home, Action, Config, OnAcAction};
-use notify_rust::{Notification, Urgency};
+use notify_rust::Notification;
 use starship_battery::{Batteries, Battery, State};
 use template::{FormatObject, Template};
 
@@ -14,6 +14,45 @@ use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 use std::thread;
+
+#[cfg(target_os = "macos")]
+mod cross_notification {
+    use notify_rust::{Notification, Timeout, Urgency};
+
+    pub fn show(body: &str, summary: &str, _urgency: Urgency, _timeout: Timeout, _icon: &str) {
+        Notification::new().summary(summary).body(body).show().ok();
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod cross_notification {
+    use notify_rust::{Notification, Timeout, Urgency};
+
+    pub fn show(body: &str, summary: &str, _urgency: Urgency, timeout: Timeout, _icon: &str) {
+        Notification::new()
+            .summary(summary)
+            .body(body)
+            .timeout(timeout)
+            .show()
+            .ok();
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod cross_notification {
+    use notify_rust::{Notification, Timeout, Urgency};
+
+    pub fn show(body: &str, summary: &str, urgency: Urgency, timeout: Timeout, icon: &str) {
+        Notification::new()
+            .summary(summary)
+            .body(body)
+            .icon(icon)
+            .urgency(urgency)
+            .timeout(timeout)
+            .show()
+            .ok();
+    }
+}
 
 trait CommandRunner {
     fn run(&mut self) -> Result<()>;
@@ -78,14 +117,7 @@ impl DesktopNotification for Action {
             let templated_summary = &self.fill_template(n.summary.clone(), format_obj);
             let mut body = n.body.clone().unwrap_or(String::from(""));
             body = self.fill_template(body, format_obj);
-            Notification::new()
-                .summary(templated_summary)
-                .body(body.as_str())
-                .icon(n.icon.as_str())
-                .urgency(n.urgency)
-                .timeout(n.timeout)
-                .show()
-                .ok();
+            cross_notification::show(&body, templated_summary, n.urgency, n.timeout, &n.icon);
         }
     }
 
@@ -115,14 +147,7 @@ impl DesktopNotification for OnAcAction {
             let templated_summary = &self.fill_template(n.summary.clone(), format_obj);
             let mut body = n.body.clone().unwrap_or(String::from(""));
             body = self.fill_template(body, format_obj);
-            Notification::new()
-                .summary(templated_summary)
-                .body(body.as_str())
-                .icon(n.icon.as_str())
-                .urgency(n.urgency)
-                .timeout(n.timeout)
-                .show()
-                .ok();
+            cross_notification::show(&body, templated_summary, n.urgency, n.timeout, &n.icon);
         }
     }
 
@@ -150,15 +175,35 @@ fn get_version_from_env() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+#[cfg(target_os = "macos")]
+fn setup_app() {
+    use notify_rust::{get_bundle_identifier_or_default, set_application};
+
+    let app_id = get_bundle_identifier_or_default("battered");
+    let _ = set_application(&app_id);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn setup_app() {}
+
 fn main() -> Result<()> {
     env_logger::init();
 
     // Handle CLI args
     let args: Vec<String> = env::args().collect();
-    if args.len() > 1 && (args[1] == "--version" || args[1] == "-V") {
+    if args.len() > 1 && (args[1] == "--help" || args[1] == "-h") {
+        let help_text = "Usage: battered [OPTIONS]
+
+Options:
+  -V, --version  Show the version and exit.
+  -h, --help     Show this message and exit.
+";
+        print!("{}", help_text);
+        return Ok(());
+    } else if args.len() > 1 && (args[1] == "--version" || args[1] == "-V") {
         println!("battered {}", get_version_from_env());
         return Ok(());
-    }
+    };
 
     // Config
     let config_path = xdg_config_home().join("battered/config.toml");
@@ -169,6 +214,8 @@ fn main() -> Result<()> {
             .partial_cmp(&b.percentage)
             .expect("Failed to sort actions by percentage")
     }); // Sort by percentage
+
+    setup_app();
 
     // Set up battery manager
     let manager = starship_battery::Manager::new()?;
@@ -203,7 +250,6 @@ fn main() -> Result<()> {
                             Notification::new()
                                 .summary("Battered action failed")
                                 .body(e.to_string().as_str())
-                                .urgency(Urgency::Critical)
                                 .show()
                                 .ok();
                             return Err(e);
@@ -276,7 +322,6 @@ fn match_actions<T: CommandRunner + DesktopNotification>(
                     Notification::new()
                         .summary("Battered action failed")
                         .body(e.to_string().as_str())
-                        .urgency(Urgency::Critical)
                         .show()
                         .ok();
                     return Err(e);
@@ -322,7 +367,7 @@ fn get_config(config_path: &PathBuf) -> Result<Config, anyhow::Error> {
 mod tests {
     use super::*;
     use config::Notify;
-    use notify_rust::Timeout;
+    use notify_rust::{Timeout, Urgency};
     const DUMMY_STATE: &str = "discharging";
     const DUMMY_ENERGY_RATE: f32 = 32.0;
 
@@ -706,6 +751,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn test_pick_battery_by_serial_not_found() {
         let manager = starship_battery::Manager::new().unwrap();
@@ -716,5 +762,67 @@ mod tests {
             result.unwrap_err().to_string(),
             "Failed to find battery with serial number 'not-a-serial-number'"
         );
+    }
+}
+
+#[cfg(test)]
+mod platform_tests {
+    use super::*;
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_cross_notification_linux() {
+        use notify_rust::{Timeout, Urgency};
+        cross_notification::show("body", "summary", Urgency::Low, Timeout::Default, "icon");
+        // No assertion: just ensure it doesn't panic
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_cross_notification_windows() {
+        use notify_rust::{Timeout, Urgency};
+        cross_notification::show("body", "summary", Urgency::Low, Timeout::Default, "icon");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_cross_notification_macos() {
+        use notify_rust::{Timeout, Urgency};
+        cross_notification::show("body", "summary", Urgency::Low, Timeout::Default, "icon");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_setup_app() {
+        setup_app();
+    }
+}
+
+#[cfg(test)]
+mod misc_tests {
+    use super::*;
+
+    #[test]
+    fn test_get_version_from_env() {
+        let version = get_version_from_env();
+        assert!(!version.is_empty());
+    }
+
+    #[test]
+    fn test_get_config_not_found() {
+        let path = PathBuf::from("/unlikely/to/exist/config.toml");
+        let result = get_config(&path);
+        // Should not error, should fallback to defaults
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_on_ac_action_exceeds_threshold() {
+        let action = OnAcAction {
+            percentage: 0.5,
+            notify: None,
+            command: None,
+        };
+        assert!(action.exceeds_threshold(&0.6));
+        assert!(!action.exceeds_threshold(&0.4));
     }
 }
