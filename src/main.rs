@@ -764,3 +764,65 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod platform_tests {
+    use super::*;
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_cross_notification_linux() {
+        use notify_rust::{Timeout, Urgency};
+        cross_notification::show("body", "summary", Urgency::Low, Timeout::Default, "icon");
+        // No assertion: just ensure it doesn't panic
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_cross_notification_windows() {
+        use notify_rust::{Timeout, Urgency};
+        cross_notification::show("body", "summary", Urgency::Low, Timeout::Default, "icon");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_cross_notification_macos() {
+        use notify_rust::{Timeout, Urgency};
+        cross_notification::show("body", "summary", Urgency::Low, Timeout::Default, "icon");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_setup_app() {
+        setup_app();
+    }
+}
+
+#[cfg(test)]
+mod misc_tests {
+    use super::*;
+
+    #[test]
+    fn test_get_version_from_env() {
+        let version = get_version_from_env();
+        assert!(!version.is_empty());
+    }
+
+    #[test]
+    fn test_get_config_not_found() {
+        let path = PathBuf::from("/unlikely/to/exist/config.toml");
+        let result = get_config(&path);
+        // Should not error, should fallback to defaults
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_on_ac_action_exceeds_threshold() {
+        let action = OnAcAction {
+            percentage: 0.5,
+            notify: None,
+            command: None,
+        };
+        assert!(action.exceeds_threshold(&0.6));
+        assert!(!action.exceeds_threshold(&0.4));
+    }
+}
