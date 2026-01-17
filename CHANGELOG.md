@@ -7,16 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Release script
+- Additional template parameters
+- `-h|--help` CLI arg
+- Rudimentary support for Mac OS
+
+### Fixed
+
+- Fixed some unit tests
+
 ### Changed
 
 - Updated dependencies
 - Resolved some GH action issues raised by `zizmor`
+- Updated documentation and man pages
 
 ## [0.8.2] - 2025-06-26
 
 ### Added
 
 - man pages
+- Automated coverage reporting
 
 ## [0.8.1] - 2025-06-20
 

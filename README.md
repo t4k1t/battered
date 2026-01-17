@@ -68,13 +68,13 @@ cat /sys/class/power_supply/BAT0/serial_number
 
 Example config:
 ```toml
-interval = 60                        # Battery level check interval in seconds; optional; defaults to 60; integer
-serial_number = "31415"              # Serial number of battery; optional; defaults to first battery; string
+interval = 60           # Battery level check interval in seconds; optional; defaults to 60; integer
+serial_number = "31415" # Serial number of battery; optional; defaults to first battery; string
 
 [[action]]
-percentage = 0.25                    # Run action below this threshold; required; decimal
-command = "./powersave.sh enable"    # CLI command to run; optional; string
-[action.notify]                      # Notification settings; optional; table
+percentage = 0.25                 # Run action below this threshold; required; decimal
+command = "./powersave.sh enable" # CLI command to run; optional; string
+[action.notify] # Notification settings; optional; table
 summary = "Battery low!"             # Notification summary; required within action.notify table; string
 body = "Battery below $percentage%!" # Notification body; optional; string
 urgency = "Critical"                 # Notfication urgency; optional; defaults to `Normal`; enum[ Low | Normal | Critical ]
@@ -99,7 +99,7 @@ icon = "battery-good-charging"
 timeout = 300
 ```
 
-### Mac OS notifications
+### Notifications on Mac OS
 
 On Mac OS there are some limitations to notifications. Only the `body` and `summary` options have an effect. The `urgency`, `timeout`, and `icon` options can be set, but will be ignored.
 
