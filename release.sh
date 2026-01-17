@@ -67,18 +67,18 @@ main() {
         create_gh_release "$latest_version" "$next_version"
     fi
 
-    # Publish dist to crates.io
-    if [[ ${rsh_skip,,} = *'publish'* ]]; then
-        echo "Skipping publishing…"
-    else
-        just publish
-    fi
-
     # Clean up backup files
     if [[ ${rsh_skip,,} = *'cleanup'* ]]; then
         echo "Skipping cleanup…"
     else
         rm -f Cargo.toml.bak CHANGELOG.md.bak
+    fi
+
+    # Publish dist to crates.io
+    if [[ ${rsh_skip,,} = *'publish'* ]]; then
+        echo "Skipping publishing…"
+    else
+        just publish
     fi
 }
 
@@ -92,7 +92,7 @@ tag_and_push() {
     next_version="$2"
     read -p "Push tag and changes? (y/N)" confirmation
     case "$confirmation" in
-    Y | y | Yes | yes) git tag -a "v$2" -m "$2 && "git push --follow-tags ;;
+    Y | y | Yes | yes) git tag -a "v$2" -m "$2" && git push --follow-tags ;;
     *) echo "Cancelled push…" ;;
     esac
 }
