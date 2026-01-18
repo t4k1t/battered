@@ -161,7 +161,7 @@ update_changelog() {
 get_version_info() {
     # Get latest version
     version_prefix="v"
-    latest_tag=$(git tag --sort=version:refname | tail -n 1)
+    latest_tag=$(git tag --sort=version:refname | grep -v pre | tail -n 1)
     latest_version=${latest_tag#"$version_prefix"}
 
     # Calculate next version
