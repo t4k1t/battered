@@ -141,7 +141,7 @@ update_changelog() {
     next_version="$2"
     if [ -f "CHANGELOG.md" ]; then
         # Create .bak file, then replace the current Unreleased version and update corresponding GH compare links
-        sed -i.bak -e "s/\[Unreleased\]/\[$next_version\] - $(date -I)/" -e "s/$latest_version...HEAD/$next_version...HEAD\n\[$next_version\]\: $RSH_REPO\/compare\/$latest_version...$next_version/" CHANGELOG.md
+        sed -i.bak -e "s/\[Unreleased\]/\[$next_version\] - $(date -I)/" -e "s/$latest_version...HEAD/$next_version...HEAD\n\[$next_version\]\: $RSH_REPO\/compare\/v$latest_version...v$next_version/" CHANGELOG.md
         echo "Updated CHANGELOG.md with new version: $next_version"
     else
         err "CHANGELOG.md not found!"
