@@ -88,3 +88,7 @@ command = "./powersave.sh disable"
 [on_ac.notify]
 summary = "Connected to power supply"
 ```
+
+# SECURITY
+
+For security reasons, **battered** refuses to start if its config file is world-writable. See _battered_(1) for more information on security considerations.

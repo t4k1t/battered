@@ -39,6 +39,13 @@ A minimal configuration file must contain at least one `[[action]]` entry. See b
 **RUST_LOG**
 : Logging is configured via the RUST_LOG environment variable. Possible values are "error", "warn", "info", "debug", "trace", or "off" (and these values are case-insensitive). Defaults to "error".
 
+# SECURITY
+
+While running arbitrary commands makes _battered_(1) a very powerful tool, it also has inherent risks. Therefore, some steps have been taken to reduce the attack surface:
+
+- _battered_(1) refuses to start if the config file is world-writable
+- Configured **actions** are executed directly, without spawning a shell
+
 # BUGS
 
 Issue reports or feature requests can be filed at https://github.com/t4k1t/battered/issues

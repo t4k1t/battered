@@ -186,6 +186,14 @@ fn setup_app() {
 #[cfg(not(target_os = "macos"))]
 fn setup_app() {}
 
+fn is_world_writable(path: &PathBuf) -> Result<bool> {
+    // Check if file is world-writable
+    use std::os::unix::fs::MetadataExt;
+    let metadata = std::fs::metadata(path)?;
+    let permissions = metadata.mode();
+    Ok(permissions & 0o002 != 0)
+}
+
 fn main() -> Result<()> {
     env_logger::init();
 
@@ -207,7 +215,14 @@ Options:
 
     // Config
     let config_path = xdg_config_home().join("battered/config.toml");
+    if config_path.exists() && is_world_writable(&config_path)? {
+        return Err(anyhow::anyhow!(
+            "Config file '{}' is world-writable. Please change its permissions to be more restrictive.",
+            config_path.display()
+        ));
+    }
     let config = get_config(&config_path).with_context(|| "Failed to read config")?;
+
     let mut actions = config.action;
     actions.sort_by(|a, b| {
         a.percentage
