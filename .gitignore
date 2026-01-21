@@ -1,3 +1,4 @@
 /target
-# coverage
-tarpaulin-report.*
+
+# env
+.envrc
