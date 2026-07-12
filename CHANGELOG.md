@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Check config file permissions
 
+### Changed
+
+- Updated dependencies
+
 ## [0.9.0] - 2026-01-18
 
 ### Added
