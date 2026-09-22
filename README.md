@@ -7,9 +7,9 @@
 
 <img height="64" alt="battered Icon" src="https://raw.githubusercontent.com/t4k1t/battered/main/assets/icon/battered-icon.svg" align="left">
 
-Make the most of your battery life with custom actions and informative desktop notifications.
+Make the most of your battery life with custom actions and desktop notifications.
 
-Written in Rust, **battered** uses minimal system resources.
+Written in Rust, **battered** attempts to be light on system resources.
 
 ![Screenshot discharging notification](examples/screenshots/notification-discharging.png)
 
