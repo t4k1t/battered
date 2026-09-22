@@ -23,6 +23,8 @@ Written in Rust, **battered** uses minimal system resources.
 - Configurable poll interval
 - Cross-platform: Mac OS and Linux
 
+![Screenshot discharging notification](examples/screenshots/notification-discharging.png)
+
 ## Usage
 
 First, make sure you've [configured](#configuration) some actions. Then simply run **battered**:
