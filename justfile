@@ -1,5 +1,8 @@
 alias cov := coverage
 
+@list:
+    just -l
+
 # run unit tests
 @test:
     echo "Running unit tests"
