@@ -11,6 +11,8 @@ Make the most of your battery life with custom actions and informative desktop n
 
 Written in Rust, **battered** uses minimal system resources.
 
+![Screenshot discharging notification](examples/screenshots/notification-discharging.png)
+
 -----
 
 [Features](#features) • [Usage](#usage) • [Installation](#installation) • [Configuration](#configuration) • [Logging](#logging) • [License](#license)
@@ -22,8 +24,6 @@ Written in Rust, **battered** uses minimal system resources.
 - Optional action and notification on connecting power supply
 - Configurable poll interval
 - Cross-platform: Mac OS and Linux
-
-![Screenshot discharging notification](examples/screenshots/notification-discharging.png)
 
 ## Usage
 
