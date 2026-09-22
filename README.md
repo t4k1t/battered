@@ -54,6 +54,8 @@ paru -Syu battered
 2. `$HOME/.config/battered/config.toml`
 3. `/.config/battered/config.toml` if `$HOME` is not set
 
+If the `BATTERED_CONFIG_PATH` env variable is set, **battered** will instead try to load its configuration from there.
+
 For security reasons, **battered** refuses to start if the configuration file is world-writable.
 
 The `summary` and `body` fields of the `[action.notify]` table support optional placeholders which will be replaced with calculated values. The following placeholders are available:

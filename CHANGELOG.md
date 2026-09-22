@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
--
+### Added
+
+- Support overriding config file location via env var
 
 ## [0.9.2] - 2026-09-18
 

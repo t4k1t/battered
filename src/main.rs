@@ -214,7 +214,10 @@ Options:
     };
 
     // Config
-    let config_path = xdg_config_home().join("battered/config.toml");
+    let config_path = std::env::var("BATTERED_CONFIG_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| xdg_config_home().join("battered/config.toml"));
+
     if config_path.exists() && is_world_writable(&config_path)? {
         return Err(anyhow::anyhow!(
             "Config file '{}' is world-writable. Please change its permissions to be more restrictive.",
