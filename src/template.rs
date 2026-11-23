@@ -1,20 +1,15 @@
-use std::fmt::Write;
-
 pub trait Template {
-    fn to_template(&self) -> String;
+    fn placeholders(&self) -> Vec<(String, String)>;
 }
 
 // macro to implement the Template trait for a struct
 macro_rules! impl_template {
     ($struct_name:ident { $($field_name:ident),* }) => {
         impl Template for $struct_name<'_> {
-            // Transform fields into '<field>: <value>'-format string
-            fn to_template(&self) -> String {
-                let mut result = String::new();
-                $(
-                    let _ = write!(result, "{}: {}\n", stringify!($field_name), &self.$field_name);
-                )*
-                result
+            fn placeholders(&self) -> Vec<(String, String)> {
+                vec![$(
+                    (stringify!($field_name).to_string(), self.$field_name.to_string())
+                ),*]
             }
         }
     };

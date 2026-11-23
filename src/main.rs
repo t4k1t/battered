@@ -5,7 +5,7 @@ mod template;
 extern crate log;
 extern crate starship_battery;
 use anyhow::{Context, Result};
-use config::{xdg_config_home, Action, Config, OnAcAction};
+use config::{xdg_config_home, Action, Config};
 use notify_rust::Notification;
 use starship_battery::{Batteries, Battery, State};
 use template::{FormatObject, Template};
@@ -56,118 +56,62 @@ mod cross_notification {
 
 trait CommandRunner {
     fn run(&mut self) -> Result<()>;
-    fn exceeds_threshold(&self, value: &f32) -> bool;
-}
-
-impl CommandRunner for Action {
-    fn run(&mut self) -> Result<()> {
-        let command = self.command.as_ref();
-        match command {
-            Some(cmd) => {
-                let status = Command::new(&cmd[0])
-                    .args(&cmd[1..])
-                    .status()
-                    .with_context(|| format!("Failed to execute '{}'", cmd.join(" ")))?;
-                if !status.success() {
-                    return Err(anyhow::anyhow!("Command failed: {}", status));
-                }
-                Ok(())
-            }
-            _ => Ok(()),
-        }
-    }
-
-    fn exceeds_threshold(&self, value: &f32) -> bool {
-        value < &self.percentage
-    }
-}
-
-impl CommandRunner for OnAcAction {
-    fn run(&mut self) -> Result<()> {
-        let command = self.command.as_ref();
-        match command {
-            Some(cmd) => {
-                let status = Command::new(&cmd[0])
-                    .args(&cmd[1..])
-                    .status()
-                    .with_context(|| format!("Failed to execute '{}'", cmd.join(" ")))?;
-                if !status.success() {
-                    return Err(anyhow::anyhow!("Command failed: {}", status));
-                }
-                Ok(())
-            }
-            _ => Ok(()),
-        }
-    }
-
-    fn exceeds_threshold(&self, value: &f32) -> bool {
-        value >= &self.percentage
-    }
+    fn exceeds_threshold(&self, value: f32) -> bool;
 }
 
 trait DesktopNotification {
     fn show(&mut self, format_obj: &FormatObject);
     fn has_notify(&self) -> bool;
-    fn fill_template<T: Template>(&self, input_string: String, format_obj: &T) -> String;
+}
+
+fn run_command(command: &Option<Vec<String>>) -> Result<()> {
+    match command {
+        Some(cmd) => {
+            let status = Command::new(&cmd[0])
+                .args(&cmd[1..])
+                .status()
+                .with_context(|| format!("Failed to execute '{}'", cmd.join(" ")))?;
+            if !status.success() {
+                return Err(anyhow::anyhow!("Command failed: {}", status));
+            }
+            Ok(())
+        }
+        None => Ok(()),
+    }
+}
+
+impl CommandRunner for Action {
+    fn run(&mut self) -> Result<()> {
+        run_command(&self.command)
+    }
+
+    fn exceeds_threshold(&self, value: f32) -> bool {
+        self.matches(value)
+    }
+}
+
+fn fill_template<T: Template>(input_string: &str, format_obj: &T) -> String {
+    let mut result = input_string.to_string();
+
+    // Replace template vars with templated values from FormatObject
+    for (placeholder, value) in format_obj.placeholders() {
+        let name = format!("${}", placeholder);
+        result = result.replace(&name, &value);
+    }
+    result
 }
 
 impl DesktopNotification for Action {
     fn show(&mut self, format_obj: &FormatObject) {
         if let Some(n) = &self.notify {
-            let templated_summary = &self.fill_template(n.summary.clone(), format_obj);
-            let mut body = n.body.clone().unwrap_or(String::from(""));
-            body = self.fill_template(body, format_obj);
-            cross_notification::show(&body, templated_summary, n.urgency, n.timeout, &n.icon);
+            let templated_summary = fill_template(&n.summary, format_obj);
+            let body = fill_template(n.body.as_deref().unwrap_or(""), format_obj);
+            cross_notification::show(&body, &templated_summary, n.urgency, n.timeout, &n.icon);
         }
     }
 
     fn has_notify(&self) -> bool {
         self.notify.is_some()
-    }
-
-    fn fill_template<T: Template>(&self, input_string: String, format_obj: &T) -> String {
-        let mut result = input_string;
-        let format_string = format_obj.to_template();
-
-        // Replace template vars with templated values from FormatObject
-        for line in format_string.lines() {
-            let parts: Vec<&str> = line.split(": ").collect();
-            if parts.len() == 2 {
-                let placeholder = format!("${}", parts[0]);
-                result = result.replace(&placeholder, parts[1]);
-            }
-        }
-        result
-    }
-}
-
-impl DesktopNotification for OnAcAction {
-    fn show(&mut self, format_obj: &FormatObject) {
-        if let Some(n) = &self.notify {
-            let templated_summary = &self.fill_template(n.summary.clone(), format_obj);
-            let mut body = n.body.clone().unwrap_or(String::from(""));
-            body = self.fill_template(body, format_obj);
-            cross_notification::show(&body, templated_summary, n.urgency, n.timeout, &n.icon);
-        }
-    }
-
-    fn has_notify(&self) -> bool {
-        self.notify.is_some()
-    }
-
-    fn fill_template<T: Template>(&self, input_string: String, format_obj: &T) -> String {
-        let mut result = input_string;
-        let format_string = format_obj.to_template();
-
-        // Replace template vars with templated values from FormatObject
-        for line in format_string.lines() {
-            let parts: Vec<&str> = line.split(": ").collect();
-            if parts.len() == 2 {
-                let placeholder = format!("${}", parts[0]);
-                result = result.replace(&placeholder, parts[1]);
-            }
-        }
-        result
     }
 }
 
@@ -224,7 +168,7 @@ Options:
             config_path.display()
         ));
     }
-    let config = get_config(&config_path).with_context(|| "Failed to read config")?;
+    let mut config = get_config(&config_path).with_context(|| "Failed to read config")?;
 
     let mut actions = config.action;
     actions.sort_by(|a, b| {
@@ -248,7 +192,6 @@ Options:
         let charge_value = battery.state_of_charge().value;
         let percentage = (charge_value * 100.0).floor();
         let state = battery.state();
-        let mut on_ac = config.on_ac.clone();
         info!("Charge: {:.2}", charge_value);
         info!("State:  {}", state);
 
@@ -260,7 +203,7 @@ Options:
         if state == State::Charging {
             if last_action_index != usize::MAX {
                 last_action_index = usize::MAX; // Reset state
-                if let Some(on_ac) = &mut on_ac {
+                if let Some(on_ac) = &mut config.on_ac {
                     match trigger_action(on_ac, &format_obj) {
                         Ok(_) => (),
                         Err(e) => {
@@ -280,7 +223,7 @@ Options:
         }
         match_actions(
             &mut actions,
-            &charge_value,
+            charge_value,
             &mut last_action_index,
             &format_obj,
         )
@@ -323,7 +266,7 @@ fn pick_battery(
 
 fn match_actions<T: CommandRunner + DesktopNotification>(
     actions: &mut [T],
-    charge_value: &f32,
+    charge_value: f32,
     last_action_index: &mut usize,
     format_obj: &FormatObject,
 ) -> Result<(), anyhow::Error> {
@@ -384,20 +327,18 @@ fn get_config(config_path: &PathBuf) -> Result<Config, anyhow::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config::Notify;
+    use config::{threshold_matches, Notify, Threshold};
     use notify_rust::{Timeout, Urgency};
     const DUMMY_STATE: &str = "discharging";
     const DUMMY_ENERGY_RATE: f32 = 32.0;
 
     #[derive(Copy, Clone)]
-    struct MockNotify {}
-
-    #[derive(Copy, Clone)]
     struct MockAction {
         show_call_count: usize,
         run_call_count: usize,
-        notify: Option<MockNotify>,
+        has_notify: bool,
         percentage: f32,
+        threshold: Threshold,
     }
 
     impl DesktopNotification for MockAction {
@@ -405,10 +346,7 @@ mod tests {
             self.show_call_count += 1;
         }
         fn has_notify(&self) -> bool {
-            self.notify.is_some()
-        }
-        fn fill_template<T: Template>(&self, _input_string: String, _format_obj: &T) -> String {
-            String::from("")
+            self.has_notify
         }
     }
 
@@ -417,14 +355,24 @@ mod tests {
             self.run_call_count += 1;
             Ok(())
         }
-        fn exceeds_threshold(&self, value: &f32) -> bool {
-            value < &self.percentage
+        fn exceeds_threshold(&self, value: f32) -> bool {
+            threshold_matches(self.threshold, self.percentage, value)
+        }
+    }
+
+    fn format_obj(percentage: f32) -> FormatObject<'static> {
+        let percentage: &'static f32 = Box::leak(Box::new(percentage));
+        FormatObject {
+            percentage,
+            state: DUMMY_STATE,
+            energy_rate: &DUMMY_ENERGY_RATE,
         }
     }
 
     #[test]
     fn test_has_notify() {
         let action_w_notify = Action {
+            threshold: Threshold::Below,
             percentage: 0.5,
             command: None,
             notify: Some(Notify {
@@ -442,6 +390,7 @@ mod tests {
     #[test]
     fn test_has_no_notify() {
         let action_w_notify = Action {
+            threshold: Threshold::Below,
             percentage: 0.5,
             command: None,
             notify: None,
@@ -456,13 +405,10 @@ mod tests {
             show_call_count: 0,
             run_call_count: 0,
             percentage: 0.5,
-            notify: None,
+            has_notify: false,
+            threshold: Threshold::Below,
         };
-        let format_obj = FormatObject {
-            percentage: &50.0,
-            state: &DUMMY_STATE,
-            energy_rate: &DUMMY_ENERGY_RATE,
-        };
+        let format_obj = format_obj(50.0);
         let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_ok());
         assert_eq!(action.show_call_count, 0);
@@ -471,19 +417,15 @@ mod tests {
 
     #[test]
     fn test_threshold_with_notification() {
-        let mock_notify = MockNotify {};
         let mut action = MockAction {
             run_call_count: 0,
             show_call_count: 0,
             percentage: 0.5,
-            notify: Some(mock_notify),
+            has_notify: true,
+            threshold: Threshold::Below,
         };
 
-        let format_obj = FormatObject {
-            percentage: &50.0,
-            state: &DUMMY_STATE,
-            energy_rate: &DUMMY_ENERGY_RATE,
-        };
+        let format_obj = format_obj(50.0);
         let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_ok());
         assert_eq!(action.show_call_count, 1);
@@ -493,47 +435,44 @@ mod tests {
     #[test]
     fn test_threshold_below_threshold_fn() {
         let action = Action {
+            threshold: Threshold::Below,
             percentage: 0.5,
             command: None,
             notify: None,
         };
         let charge_value_below = 0.3; // Value below percentage threshold
-        let charge_value_above = 0.8; // Value below percentage threshold
+        let charge_value_above = 0.8; // Value above percentage threshold
 
-        let below_result = action.exceeds_threshold(&charge_value_below);
+        let below_result = action.exceeds_threshold(charge_value_below);
         assert_eq!(below_result, true);
 
-        let above_result = action.exceeds_threshold(&charge_value_above);
+        let above_result = action.exceeds_threshold(charge_value_above);
         assert_eq!(above_result, false);
     }
 
     #[test]
     fn test_threshold_action_above_threshold() {
-        let mock_notify = MockNotify {};
         let action = MockAction {
             run_call_count: 0,
             show_call_count: 0,
             percentage: 0.5,
-            notify: Some(mock_notify),
+            has_notify: true,
+            threshold: Threshold::Below,
         };
         let charge_value = 0.7; // Value above percentage threshold
 
         let mut actions = vec![action];
         let mut last_action_index: usize = 0;
-        let format_obj = FormatObject {
-            percentage: &70.0,
-            state: &DUMMY_STATE,
-            energy_rate: &DUMMY_ENERGY_RATE,
-        };
+        let format_obj = format_obj(70.0);
         let result = match_actions(
             &mut actions,
-            &charge_value,
+            charge_value,
             &mut last_action_index,
             &format_obj,
         );
         assert!(result.is_ok());
-        assert_eq!(action.show_call_count, 0);
-        assert_eq!(action.run_call_count, 0);
+        assert_eq!(actions[0].show_call_count, 0);
+        assert_eq!(actions[0].run_call_count, 0);
     }
 
     #[test]
@@ -542,41 +481,34 @@ mod tests {
             run_call_count: 0,
             show_call_count: 0,
             percentage: 0.5,
-            notify: None,
+            has_notify: false,
+            threshold: Threshold::Below,
         };
         let charge_value = 0.3; // Value below percentage threshold
 
-        let mut actions = vec![action]; // Creates a copy
+        let mut actions = vec![action];
         let mut last_action_index = usize::MAX;
-        let format_obj = FormatObject {
-            percentage: &30.0,
-            state: &DUMMY_STATE,
-            energy_rate: &DUMMY_ENERGY_RATE,
-        };
+        let format_obj = format_obj(30.0);
         let result = match_actions(
             &mut actions,
-            &charge_value,
+            charge_value,
             &mut last_action_index,
             &format_obj,
         );
 
-        let result_action = actions[0];
         assert!(result.is_ok());
-        assert_eq!(result_action.run_call_count, 1);
+        assert_eq!(actions[0].run_call_count, 1);
     }
 
     #[test]
     fn test_successful_action() {
         let mut action = Action {
+            threshold: Threshold::Below,
             percentage: 0.5,
             notify: None,
             command: Some(vec![String::from("true")]),
         };
-        let format_obj = FormatObject {
-            percentage: &50.0,
-            state: &DUMMY_STATE,
-            energy_rate: &DUMMY_ENERGY_RATE,
-        };
+        let format_obj = format_obj(50.0);
         let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_ok());
     }
@@ -584,15 +516,12 @@ mod tests {
     #[test]
     fn test_no_action() {
         let mut action = Action {
+            threshold: Threshold::Below,
             percentage: 0.5,
             notify: None,
             command: None,
         };
-        let format_obj = FormatObject {
-            percentage: &50.0,
-            state: &DUMMY_STATE,
-            energy_rate: &DUMMY_ENERGY_RATE,
-        };
+        let format_obj = format_obj(50.0);
         let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_ok());
     }
@@ -600,63 +529,51 @@ mod tests {
     #[test]
     fn test_failing_action() {
         let mut action = Action {
+            threshold: Threshold::Below,
             percentage: 0.5,
             notify: None,
             command: Some(vec![String::from("false")]),
         };
-        let format_obj = FormatObject {
-            percentage: &50.0,
-            state: &DUMMY_STATE,
-            energy_rate: &DUMMY_ENERGY_RATE,
-        };
+        let format_obj = format_obj(50.0);
         let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_successful_on_ac_action() {
-        let mut action = OnAcAction {
+        let mut action = Action {
+            threshold: Threshold::AtOrAbove,
             percentage: 0.0,
             notify: None,
             command: Some(vec![String::from("true")]),
         };
-        let format_obj = FormatObject {
-            percentage: &50.0,
-            state: &DUMMY_STATE,
-            energy_rate: &DUMMY_ENERGY_RATE,
-        };
+        let format_obj = format_obj(50.0);
         let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_no_on_ac_action() {
-        let mut action = OnAcAction {
+        let mut action = Action {
+            threshold: Threshold::AtOrAbove,
             percentage: 0.1,
             notify: None,
             command: None,
         };
-        let format_obj = FormatObject {
-            percentage: &50.0,
-            state: &DUMMY_STATE,
-            energy_rate: &DUMMY_ENERGY_RATE,
-        };
+        let format_obj = format_obj(50.0);
         let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_failing_on_ac_action() {
-        let mut action = OnAcAction {
+        let mut action = Action {
+            threshold: Threshold::AtOrAbove,
             percentage: 0.0,
             notify: None,
             command: Some(vec![String::from("false")]),
         };
-        let format_obj = FormatObject {
-            percentage: &50.0,
-            state: &DUMMY_STATE,
-            energy_rate: &DUMMY_ENERGY_RATE,
-        };
+        let format_obj = format_obj(50.0);
         let result = trigger_action(&mut action, &format_obj);
         assert!(result.is_err());
     }
@@ -666,6 +583,7 @@ mod tests {
         let summary = String::from("Percentage is $percentage%!");
         let body = String::from("$percentage is also in the body");
         let action_w_notify = Action {
+            threshold: Threshold::Below,
             percentage: 0.5,
             command: None,
             notify: Some(Notify {
@@ -676,47 +594,19 @@ mod tests {
                 timeout: Timeout::Default,
             }),
         };
-        let format_obj = FormatObject {
-            percentage: &42.0,
-            state: &DUMMY_STATE,
-            energy_rate: &DUMMY_ENERGY_RATE,
-        };
-        let summary_result = action_w_notify.fill_template(summary, &format_obj);
+        let format_obj = format_obj(42.0);
+        let summary_result = fill_template(&summary, &format_obj);
         assert_eq!(summary_result, "Percentage is 42%!");
-        let body_result = action_w_notify.fill_template(body, &format_obj);
+        let body_result = fill_template(&body, &format_obj);
         assert_eq!(body_result, "42 is also in the body");
-    }
-
-    #[test]
-    fn test_template_replaces_percentage_for_on_ac_action() {
-        let summary = String::from("Percentage is $percentage%!");
-        let body = String::from("$percentage is also in the body");
-        let action_w_notify = OnAcAction {
-            percentage: 0.21,
-            command: None,
-            notify: Some(Notify {
-                summary: summary.clone(),
-                body: Some(body.clone()),
-                urgency: Urgency::Low,
-                icon: String::from(""),
-                timeout: Timeout::Default,
-            }),
-        };
-        let format_obj = FormatObject {
-            percentage: &42.0,
-            state: &DUMMY_STATE,
-            energy_rate: &DUMMY_ENERGY_RATE,
-        };
-        let summary_result = action_w_notify.fill_template(summary, &format_obj);
-        assert_eq!(summary_result, "Percentage is 42%!");
-        let body_result = action_w_notify.fill_template(body, &format_obj);
-        assert_eq!(body_result, "42 is also in the body");
+        let _ = &action_w_notify; // notification fields exercised via has_notify tests
     }
 
     #[test]
     fn test_template_replaces_nothing() {
         let summary = String::from("No percentage to replace here!");
         let action_w_notify = Action {
+            threshold: Threshold::Below,
             percentage: 0.5,
             command: None,
             notify: Some(Notify {
@@ -727,19 +617,17 @@ mod tests {
                 timeout: Timeout::Default,
             }),
         };
-        let format_obj = FormatObject {
-            percentage: &42.0,
-            state: &DUMMY_STATE,
-            energy_rate: &DUMMY_ENERGY_RATE,
-        };
-        let result = action_w_notify.fill_template(summary, &format_obj);
+        let format_obj = format_obj(42.0);
+        let result = fill_template(&summary, &format_obj);
         assert_eq!(result, "No percentage to replace here!");
+        let _ = &action_w_notify;
     }
 
     #[test]
     fn test_template_does_not_replace_unknown() {
         let summary = String::from("No $value to replace here!");
         let action_w_notify = Action {
+            threshold: Threshold::Below,
             percentage: 0.5,
             command: None,
             notify: Some(Notify {
@@ -750,13 +638,10 @@ mod tests {
                 timeout: Timeout::Default,
             }),
         };
-        let format_obj = FormatObject {
-            percentage: &42.0,
-            state: &DUMMY_STATE,
-            energy_rate: &DUMMY_ENERGY_RATE,
-        };
-        let result = action_w_notify.fill_template(summary, &format_obj);
+        let format_obj = format_obj(42.0);
+        let result = fill_template(&summary, &format_obj);
         assert_eq!(result, "No $value to replace here!");
+        let _ = &action_w_notify;
     }
 
     #[test]
@@ -818,6 +703,7 @@ mod platform_tests {
 #[cfg(test)]
 mod misc_tests {
     use super::*;
+    use config::Threshold;
 
     #[test]
     fn test_get_version_from_env() {
@@ -835,12 +721,13 @@ mod misc_tests {
 
     #[test]
     fn test_on_ac_action_exceeds_threshold() {
-        let action = OnAcAction {
+        let action = Action {
+            threshold: Threshold::AtOrAbove,
             percentage: 0.5,
             notify: None,
             command: None,
         };
-        assert!(action.exceeds_threshold(&0.6));
-        assert!(!action.exceeds_threshold(&0.4));
+        assert!(action.exceeds_threshold(0.6));
+        assert!(!action.exceeds_threshold(0.4));
     }
 }

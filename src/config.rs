@@ -6,37 +6,51 @@ use shell_words::split as shell_split;
 use std::path::PathBuf;
 use std::time::Duration;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Deserialize)]
+pub enum Threshold {
+    /// Fires when the battery level drops to `percentage` (discharge actions).
+    #[default]
+    Below,
+    /// Fires when the battery level rises to `percentage` (on-AC action).
+    AtOrAbove,
+}
+
+pub fn threshold_matches(threshold: Threshold, percentage: f32, value: f32) -> bool {
+    match threshold {
+        Threshold::Below => value < percentage,
+        Threshold::AtOrAbove => value >= percentage,
+    }
+}
+
 #[serde_as]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     #[serde_as(as = "DurationSeconds<u64>")]
     #[serde(default = "default_interval")]
     pub interval: Duration,
     pub action: Vec<Action>,
-    pub on_ac: Option<OnAcAction>,
+    #[serde(default, deserialize_with = "deserialize_on_ac")]
+    pub on_ac: Option<Action>,
     #[serde(default, deserialize_with = "deserialize_serial_number")]
     pub serial_number: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Action {
+    #[serde(default)]
+    pub threshold: Threshold,
     #[serde(deserialize_with = "deserialize_float_percentage")]
     pub percentage: f32,
     #[serde(default, deserialize_with = "deserialize_command")]
     pub command: Option<Vec<String>>,
+    #[serde(default)]
     pub notify: Option<Notify>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-pub struct OnAcAction {
-    #[serde(
-        default = "default_ac_percentage",
-        deserialize_with = "deserialize_float_percentage"
-    )]
-    pub percentage: f32,
-    #[serde(default, deserialize_with = "deserialize_command")]
-    pub command: Option<Vec<String>>,
-    pub notify: Option<Notify>,
+impl Action {
+    pub fn matches(&self, value: f32) -> bool {
+        threshold_matches(self.threshold, self.percentage, value)
+    }
 }
 
 #[serde_as]
@@ -130,6 +144,33 @@ where
     Ok(Some(value))
 }
 
+fn deserialize_on_ac<'de, D>(deserializer: D) -> Result<Option<Action>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    match Option::<OnAcActionRaw>::deserialize(deserializer)? {
+        Some(raw) => Ok(Some(Action {
+            threshold: Threshold::AtOrAbove,
+            percentage: raw.percentage,
+            command: raw.command,
+            notify: raw.notify,
+        })),
+        None => Ok(None),
+    }
+}
+
+// Intermediate shape that applies the on-AC-specific defaults
+// (`percentage` optional, defaulting to 0.0) on top of the merged `Action`.
+#[derive(Deserialize)]
+struct OnAcActionRaw {
+    #[serde(default = "default_ac_percentage")]
+    percentage: f32,
+    #[serde(default, deserialize_with = "deserialize_command")]
+    command: Option<Vec<String>>,
+    #[serde(default)]
+    notify: Option<Notify>,
+}
+
 // Taken from i3status-rust
 pub fn xdg_config_home() -> PathBuf {
     // In the unlikely event that $HOME is not set, it doesn't really matter
@@ -169,6 +210,7 @@ mod tests {
         let config: Config = toml::from_str(toml_str).unwrap();
         assert_eq!(config.interval, Duration::from_secs(120));
         assert_eq!(config.serial_number, Some("31415".to_string()));
+        assert_eq!(config.action[0].threshold, Threshold::Below);
         assert_eq!(config.action[0].percentage, 0.84);
         assert_eq!(
             config.action[0].command,
@@ -197,6 +239,7 @@ mod tests {
         let config: Config = toml::from_str(toml_str).unwrap();
         assert_eq!(config.interval, Duration::from_secs(60));
         assert_eq!(config.serial_number, None);
+        assert_eq!(config.action[0].threshold, Threshold::Below);
     }
 
     #[test]
@@ -419,6 +462,7 @@ mod tests {
         let on_ac = config.on_ac.clone();
         assert_eq!(config.interval, Duration::from_secs(120));
         assert_eq!(config.action[0].percentage, 0.84);
+        assert_eq!(on_ac.as_ref().unwrap().threshold, Threshold::AtOrAbove);
         assert_eq!(
             on_ac.as_ref().unwrap().command,
             Some(vec![
@@ -431,6 +475,25 @@ mod tests {
         assert_eq!(notify.summary, "Battery charging");
         assert_eq!(notify.urgency, Urgency::Low);
         assert_eq!(notify.icon, "battery-good-charging");
+    }
+
+    #[test]
+    fn test_onac_default_percentage() {
+        let toml_str = r#"
+        [[action]]
+        percentage = 0.84
+
+        [on_ac]
+        command = "./powersave.sh profile ac"
+        "#;
+
+        let config: Config = toml::from_str(toml_str).unwrap();
+        let on_ac = config.on_ac.unwrap();
+        assert_eq!(on_ac.threshold, Threshold::AtOrAbove);
+        assert_eq!(on_ac.percentage, 0.0);
+        assert!(on_ac.matches(0.4));
+        assert!(on_ac.matches(0.0));
+        assert!(on_ac.matches(1.0)); // >= 0.0 always true; kept symmetric with old semantics
     }
 
     #[test]
